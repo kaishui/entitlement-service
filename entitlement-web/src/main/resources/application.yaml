@@ -1,0 +1,15 @@
+server:
+  port: 8443
+
+springdoc:
+  show-actuator: false
+  packages-to-scan: com.kaishui.entitlement
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/entitlement
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*" # Expose all endpoints

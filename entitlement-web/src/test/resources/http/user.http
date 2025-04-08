@@ -1,0 +1,39 @@
+### get all users
+GET {{url}}/api/users
+Accept: application/json
+
+###
+POST {{url}}/api/users
+Accept: application/json
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com"
+}
+
+### Get User by ID:
+GET {{url}}/api/users/67f4e04e6ee2c2302644fe03
+Accept: application/json
+
+###
+PUT {{url}}/api/users
+Accept: application/json
+Content-Type: application/json
+
+{
+  "id": "67f4e04e6ee2c2302644fe03",
+  "username": "updateduser",
+  "email": "updated@example.com"
+}
+
+###
+DELETE {{url}}/api/users/67f4e04e6ee2c2302644fe03
+Accept: application/json
+
+###
+
+
+
+
+
