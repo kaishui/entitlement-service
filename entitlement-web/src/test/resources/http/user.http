@@ -28,7 +28,7 @@ Content-Type: application/json
 }
 
 ###
-DELETE {{url}}/api/users/67f4e04e6ee2c2302644fe03
+DELETE {{url}}/api/users/67f4df4bd1dd833d80b70db7
 Accept: application/json
 
 ###

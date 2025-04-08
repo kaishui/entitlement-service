@@ -259,22 +259,11 @@ class UserControllerTest {
     void deleteUser() {
         ObjectId userId = new ObjectId();
         when(userService.deleteUser(userId)).thenReturn(Mono.empty());
-
-        webTestClient.delete().uri("/v1/api/users/{id}", userId.toHexString())
+        webTestClient.delete().uri("/v1/api/users/{id}", userId)
                 .exchange()
                 .expectStatus().isNoContent();
 
         verify(userService).deleteUser(userId);
     }
 
-    @Test
-    void deleteUser_notFound() {
-        when(userService.deleteUser(any(ObjectId.class))).thenReturn(Mono.empty());
-
-        webTestClient.delete().uri("/v1/api/users/{id}", new ObjectId().toHexString())
-                .exchange()
-                .expectStatus().isNotFound();
-
-        verify(userService).deleteUser(any(ObjectId.class));
-    }
 }

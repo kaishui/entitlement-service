@@ -74,7 +74,6 @@ public class UserController {
     @DeleteMapping("/{id}")
     public Mono<ResponseEntity<Void>> deleteUser(@Parameter(description = "ID of the user to delete", required = true) @PathVariable String id) {
         return userService.deleteUser(new ObjectId(id))
-                .flatMap(v -> Mono.just(ResponseEntity.noContent().<Void>build()))
-                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
+                .then(Mono.just(ResponseEntity.noContent().<Void>build()));
     }
 }
