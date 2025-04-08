@@ -50,7 +50,8 @@ public class UserController {
     })
     @PostMapping
     public Mono<ResponseEntity<User>> createUser(@Valid @RequestBody User user) { // Add @Valid
-        return userService.createUser(user)
+        return userService.insertOrUpdateUser(user)
+                .flatMap(userService::processFirstLogin) // Process first login
                 .map(createdUser -> ResponseEntity.status(HttpStatus.CREATED).body(createdUser))
                 .onErrorResume(DuplicateKeyException.class, e -> Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).build()));
     }

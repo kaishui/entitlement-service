@@ -12,6 +12,8 @@ import reactor.core.publisher.Mono;
 public interface UserRepository extends ReactiveMongoRepository<User, ObjectId> {
     Mono<User> findByUsername(String username);
 
+    Mono<User> findByStaffId(String staffId);
+
 //    @Aggregation(pipeline = {
 //            "{ '$group': { '_id': '$department', 'count': { '$sum': 1 } } }",
 //            "{ '$project': { '_id': 0, 'department': '$_id', 'count': 1 } }"

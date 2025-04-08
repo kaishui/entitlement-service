@@ -1,7 +1,10 @@
 package com.kaishui.entitlement.entity;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -12,6 +15,9 @@ import java.util.List;
 
 @Data
 @Document(collection = "users")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class User {
     @Id
     private ObjectId id;
@@ -27,12 +33,13 @@ public class User {
     private String functionalManager;
     private String entityManager;
     private String jobTitle;
-    private String status;
+    @Builder.Default
+    private boolean isActive = true;
     private String createdBy;
     private String updatedBy;
     private Date createdDate;
     private Date lastModifiedDate;
     private List<String> adGroups;
     private List<ObjectId> roleIds;
-    private boolean isFirstLogin = true;
+    private boolean isFirstLogin;
 }
