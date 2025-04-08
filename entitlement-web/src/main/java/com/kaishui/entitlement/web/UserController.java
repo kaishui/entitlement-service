@@ -51,7 +51,8 @@ public class UserController {
     @PostMapping
     public Mono<ResponseEntity<User>> createUser(@Valid @RequestBody User user) { // Add @Valid
         return userService.createUser(user)
-                .map(createdUser -> ResponseEntity.status(HttpStatus.CREATED).body(createdUser));
+                .map(createdUser -> ResponseEntity.status(HttpStatus.CREATED).body(createdUser))
+                .onErrorResume(DuplicateKeyException.class, e -> Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).build()));
     }
 
     @Operation(summary = "Update an existing user", responses = {
@@ -73,7 +74,7 @@ public class UserController {
     @DeleteMapping("/{id}")
     public Mono<ResponseEntity<Void>> deleteUser(@Parameter(description = "ID of the user to delete", required = true) @PathVariable String id) {
         return userService.deleteUser(new ObjectId(id))
-                .then(Mono.just(ResponseEntity.noContent().<Void>build()))
-                .defaultIfEmpty(ResponseEntity.notFound().build());
+                .flatMap(v -> Mono.just(ResponseEntity.noContent().<Void>build()))
+                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
     }
 }
