@@ -32,7 +32,7 @@ public class ResourceDto {
     private String region;
 
     @Schema(description = "Indicates if the resource is active", example = "true")
-    private Boolean isActive;
+    private boolean isActive;
 
     @Schema(description = "User who created the resource", accessMode = Schema.AccessMode.READ_ONLY)
     private String createdBy;

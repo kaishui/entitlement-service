@@ -1,0 +1,63 @@
+### Variables (Adjust as needed)
+@apiBasePath = /api/resources
+@contentType = application/json
+@resourceId = some-resource-id-to-test # Replace with an actual ID after creating one
+
+### 1. Create a new Resource
+# @name createResource
+POST {{url}}{{apiBasePath}}
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+{
+  "name": "User Profile Page",
+  "permission": [
+    { "page": "userProfile", "action": "view" },
+    { "page": "userProfile", "action": "edit" }
+  ],
+  "type": "page",
+  "description": "Page displaying user profile information",
+  "region": "sg",
+  "isActive": true
+}
+
+### 2. Find Resources (Get All)
+# @name getAllResources
+GET {{url}}{{apiBasePath}}
+Accept: {{contentType}}
+
+### 3. Find Resources (Filtered by isActive)
+# @name findActiveResources
+GET {{url}}{{apiBasePath}}?isActive=true
+Accept: {{contentType}}
+
+### 4. Find Resources (Filtered by name and type)
+# @name findSpecificResources
+GET {{url}}{{apiBasePath}}?name=Profile&type=page&isActive=true
+Accept: {{contentType}}
+
+### 5. Get Resource by ID
+# Requires a valid @resourceId to be set above or retrieved from createResource response
+# @name getResourceById
+GET {{url}}{{apiBasePath}}/{{resourceId}}
+Accept: {{contentType}}
+
+### 6. Update Resource by ID
+# Requires a valid @resourceId
+# @name updateResource
+PUT {{url}}{{apiBasePath}}/{{resourceId}}
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+{
+  "name": "User Profile Page (Updated)",
+  "description": "Updated description for the user profile page.",
+  "region": "uk",
+  "isActive": false
+}
+
+### 7. Delete Resource by ID
+# Requires a valid @resourceId
+# @name deleteResource
+DELETE {{url}}{{apiBasePath}}/{{resourceId}}
+Accept: */*

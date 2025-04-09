@@ -21,7 +21,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @RestController
-@RequestMapping("/api/v1/resources") // Base path for resource endpoints
+@RequestMapping("/v1/api/resources") // Base path for resource endpoints
 @RequiredArgsConstructor
 @Tag(name = "Resource Management", description = "APIs for managing Resources") // OpenAPI Tag
 public class ResourceController {

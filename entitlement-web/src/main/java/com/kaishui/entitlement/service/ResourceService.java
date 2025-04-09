@@ -29,10 +29,6 @@ public class ResourceService {
         return createDtoMono
                 .map(resourceMapper::toEntity) // Map DTO to Entity
                 .flatMap(resource -> {
-                    // Ensure default isActive is set if not provided (though DTO has default)
-                    if (resource.isActive()) {
-                        resource.setActive(true);
-                    }
                     log.info("Attempting to create resource: {}", resource.getName());
                     // Auditing fields (createdBy, createdDate) are handled by @EnableReactiveMongoAuditing
                     return resourceRepository.save(resource);
