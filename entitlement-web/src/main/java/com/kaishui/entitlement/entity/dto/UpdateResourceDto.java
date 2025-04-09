@@ -35,5 +35,5 @@ public class UpdateResourceDto {
     private String region;
 
     @Schema(description = "Updated active status", example = "false")
-    private boolean isActive;
+    private Boolean isActive;
 }

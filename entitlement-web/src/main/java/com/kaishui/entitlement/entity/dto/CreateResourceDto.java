@@ -38,5 +38,5 @@ public class CreateResourceDto {
     private String region;
 
     @Schema(description = "Set whether the resource is active (defaults to true)", example = "true")
-    private boolean isActive = true; // Default value
+    private Boolean isActive = true; // Default value
 }

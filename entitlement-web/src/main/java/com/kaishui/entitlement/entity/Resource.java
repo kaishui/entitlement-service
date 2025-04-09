@@ -36,7 +36,7 @@ public class Resource {
     private String region; // e.g., "uk", "sg", "hk"
 
     @Builder.Default // Ensure default value is set by Lombok builder
-    private boolean isActive = true;
+    private Boolean isActive = true;
 
     // Add Spring Data Auditing annotations
     @CreatedBy
