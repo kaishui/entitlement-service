@@ -13,8 +13,8 @@ import java.util.Optional;
 @UtilityClass
 public class AuthorizationUtil {
     // Define the header name used by the Gateway to pass the username
-    private static final String AUTHORIZATION_HEADER = "Authorization";
-    private static final String UNKNOWN_USER = "unknown"; // Default user if header is missing
+    public static final String AUTHORIZATION_HEADER = "Authorization";
+    public static final String UNKNOWN_USER = "unknown"; // Default user if header is missing
 
      public String extractUsernameFromContext(ContextView contextView) {
         Optional<ServerWebExchange> exchangeOptional = contextView.getOrEmpty(ServerWebExchange.class);

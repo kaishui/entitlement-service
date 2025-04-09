@@ -34,6 +34,7 @@
         <jakarta.el-api.version>6.0.1</jakarta.el-api.version>
         <jakarta.el.version>5.0.0-M1</jakarta.el.version>
         <de.flapdoodle.embed.mongo.spring3x.version>4.20.0</de.flapdoodle.embed.mongo.spring3x.version>
+        <mapstruct.version>1.6.</mapstruct.version>
     </properties>
 
     <dependencyManagement>
@@ -95,6 +96,16 @@
                 <groupId>de.flapdoodle.embed</groupId>
                 <artifactId>de.flapdoodle.embed.mongo.spring3x</artifactId>
                 <version>${de.flapdoodle.embed.mongo.spring3x.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct</artifactId>
+                <version>${mapstruct.version}3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct-processor</artifactId>
+                <version>${mapstruct.version}3</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

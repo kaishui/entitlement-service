@@ -54,7 +54,7 @@
 {
   "_id": String,
   "name": String, // e.g., "User Management Page", "Product Catalog"
-  "permission": Document, // e.g., "GET /users/*", "POST /products", "xxPage.button.view", {date: 20250101} , [{jobStatus: "pending"}, {jobStatus: "completed"}]
+  "permission": List<Document>, // e.g., [{method: "GET: uri: "/users/*"}], [method: "POST", uri: "/products"}, ["xxPage.button.view"], [{date: 20250101}] , [{jobStatus: "pending"}, {jobStatus: "completed"}]
   "type": String, // e.g., "page", "button", "api", condition
   "description": String,
   "createdBy": String,
