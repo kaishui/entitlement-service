@@ -1,5 +1,6 @@
 package com.kaishui.entitlement.web;
 
+import com.kaishui.entitlement.annotation.AuditLog;
 import com.kaishui.entitlement.entity.User;
 import com.kaishui.entitlement.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -61,6 +62,7 @@ public class UserController {
             @ApiResponse(responseCode = "404", description = "User not found")
     })
     @PutMapping
+    @AuditLog(action = "Update User", detail = "Updated user details")
     public Mono<ResponseEntity<User>> updateUser(@Valid @RequestBody User user) { // Add @Valid
         return userService.updateUser(user)
                 .map(ResponseEntity::ok)

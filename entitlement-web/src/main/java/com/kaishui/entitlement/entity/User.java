@@ -1,11 +1,11 @@
 package com.kaishui.entitlement.entity;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.bson.types.ObjectId;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -20,7 +20,8 @@ import java.util.List;
 @AllArgsConstructor
 public class User {
     @Id
-    private ObjectId id;
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY) // Mark as read-only for OpenAPI
+    private String id;
 
     @NotBlank(message = "Username cannot be blank") // Add this annotation
     private String username;
@@ -40,6 +41,7 @@ public class User {
     private Date createdDate;
     private Date lastModifiedDate;
     private List<String> adGroups;
-    private List<ObjectId> roleIds;
-    private boolean isFirstLogin;
+    private List<String> roleIds;
+    @Builder.Default // Add default for isFirstLogin if needed
+    private boolean isFirstLogin = true;
 }

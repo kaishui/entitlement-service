@@ -2,28 +2,32 @@
 GET {{url}}/api/users
 Accept: application/json
 
-###
+###CREATE USER
 POST {{url}}/api/users
 Accept: application/json
 Content-Type: application/json
+Authorization: TestUser1
 
 {
-  "username": "testuser",
-  "email": "test@example.com"
+  "username": "testuser2",
+  "email": "test@example.com",
+  "staffId": "12345"
 }
 
 ### Get User by ID:
-GET {{url}}/api/users/67f4e04e6ee2c2302644fe03
+GET {{url}}/api/users/67f61a7843061a4183cc97eb
 Accept: application/json
 
-###
+### UPDATE USERxxx
 PUT {{url}}/api/users
 Accept: application/json
+Authorization: Basic user passwd
 Content-Type: application/json
 
 {
-  "id": "67f4e04e6ee2c2302644fe03",
+  "id": "67f61a7843061a4183cc97eb",
   "username": "updateduser",
+  "staffId": "12345",
   "email": "updated@example.com"
 }
 

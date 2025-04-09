@@ -51,14 +51,13 @@
 {
   "_id": ObjectId,
   "name": String, // e.g., "User Management Page", "Product Catalog"
-  "permission": String, // e.g., "GET /users/*", "POST /products", "xxPage.button.view"
+  "permission": Document, // e.g., "GET /users/*", "POST /products", "xxPage.button.view", {date: 20250101} , [{jobStatus: "pending"}, {jobStatus: "completed"}]
   "type": String, // e.g., "page", "button", "api", condition
   "description": String,
   "createdBy": String,
   "updatedBy": String,
   "createdDate": Date,
   "lastModifiedDate": Date
-  "conditions": [document]
 }
 ```
 
@@ -83,9 +82,9 @@
 ```
 {
   "_id": ObjectId,
-  "userId": ObjectId, // Reference to a document in the `users` collection
+  "userId": String, // Reference to a document in the `users` collection staff id
   "action": String, // e.g., "user_created", "role_assigned", "resource_accessed"
-  "detail": json,
+  "detail": Document,
   "createdBy": String,
   "updatedBy": String,
   "createdDate": Date,

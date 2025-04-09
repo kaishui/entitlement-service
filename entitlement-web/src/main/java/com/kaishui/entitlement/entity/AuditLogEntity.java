@@ -9,21 +9,18 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.Date;
-import java.util.List;
+import java.util.Map;
 
 @Data
-@Document(collection = "groupDefaultRoles")
+@Document(collection = "auditLogs")
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class GroupDefaultRole {
+public class AuditLogEntity {
     @Id
-    private String id;
-    private String groupName; // AD group name
-    private List<String> roleIds; // List of default roleIds
+    private ObjectId id;
+    private String action;
+    private Map<String, Object> detail;
     private String createdBy;
-    private String updatedBy;
     private Date createdDate;
-    private String lastModifiedBy;
-    private Date lastModifiedDate;
 }
