@@ -8,7 +8,6 @@ import com.kaishui.entitlement.repository.UserRepository;
 import com.kaishui.entitlement.util.AuthorizationUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.types.ObjectId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -30,7 +29,7 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    public Mono<User> getUserById(ObjectId id) {
+    public Mono<User> getUserById(String id) {
         return userRepository.findById(id);
     }
 
@@ -110,9 +109,43 @@ public class UserService {
         existingUser.setUpdatedBy(updatedByUsername); // Set the user who performed the update
     }
 
-    @Transactional
-    public Mono<Void> deleteUser(ObjectId id) {
-        return userRepository.deleteById(id);
+    /**
+     * Deletes a user (soft delete by setting isActive=false).
+     *
+     * @param id The ID (String) of the user to delete.
+     * @return Mono<Void> indicating completion or error.
+     */
+    @Transactional // Optional: Usually not strictly needed for single-entity soft delete
+    public Mono<Void> deleteUser(String id) {
+        log.info("Attempting to soft delete user with id: {}", id);
+        // Use deferContextual to get the username for 'updatedBy'
+        return Mono.deferContextual(contextView -> {
+            String deletedByUsername = AuthorizationUtil.extractUsernameFromContext(contextView);
+
+            // Find the user by ID (assuming repository uses String ID)
+            return userRepository.findById(id)
+                    .flatMap(user -> {
+                        // Check if already inactive
+                        if (!user.isActive()) {
+                            log.info("User with id: {} is already inactive.", id);
+                            return Mono.empty(); // Nothing to do, complete successfully
+                        }
+                        // Set inactive and update audit fields
+                        user.setActive(false);
+                        user.setUpdatedBy(deletedByUsername);
+                        user.setLastModifiedDate(new Date());
+                        log.info("Setting user with id: {} to inactive.", id);
+                        // Save the updated user
+                        return userRepository.save(user);
+                    })
+                    // Handle case where user is not found
+                    .switchIfEmpty(Mono.defer(() -> {
+                        log.warn("User not found for deletion with id: {}", id);
+                        return Mono.error(new CommonException("User not found for deletion with id: " + id));
+                    }))
+                    // Ensure the final result is Mono<Void>
+                    .then();
+        });
     }
 
     public Mono<User> processFirstLogin(User user) {

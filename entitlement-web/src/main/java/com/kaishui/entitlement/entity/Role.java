@@ -1,7 +1,7 @@
 package com.kaishui.entitlement.entity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotBlank; // For validation
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,29 +14,26 @@ import java.util.Date;
 import java.util.List;
 
 @Data
-@Document(collection = "users")
+@Document(collection = "roles") // Match collection name from doc
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
+public class Role {
+
     @Id
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY) // Mark as read-only for OpenAPI
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private String id;
 
-    @NotBlank(message = "Username cannot be blank") // Add this annotation
-    private String username;
+    @NotBlank(message = "Role name cannot be blank")
+    @Indexed(unique = true) // Assuming role names should be unique
+    private String roleName;
 
-    @Indexed(unique = true)
-    private String staffId;
-
-    private String email;
-    private String department;
-    private String functionalManager;
-    private String entityManager;
-    private String jobTitle;
+    private String type; // e.g., "global", "regional", "user"
 
     @Builder.Default
-    private boolean isActive = true;
+    private Boolean isApprover = false;
+
+    private String description;
 
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private String createdBy;
@@ -50,8 +47,8 @@ public class User {
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private Date lastModifiedDate;
 
-    private List<String> adGroups;
-    private List<String> roleIds;
-    @Builder.Default // Add default for isFirstLogin if needed
-    private boolean isFirstLogin = true;
+    private List<String> resourceIds; // Array of resourceIds
+
+    @Builder.Default
+    private boolean isActive = true;
 }

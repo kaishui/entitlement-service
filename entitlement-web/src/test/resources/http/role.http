@@ -1,0 +1,124 @@
+### Variables
+@contentType = application/json
+# Use a username that your AuthorizationUtil expects
+@authToken = TestUser1
+@roleId =
+
+### 1. Create a new Role (Admin)
+# @name createAdminRole
+POST {{url}}/api/roles
+Content-Type: {{contentType}}
+Authorization: {{authToken}}
+
+{
+  "roleName": "Global Administrator",
+  "type": "global",
+  "isApprover": true,
+  "description": "Full access to all system functions.",
+  "resourceIds": ["res_001", "res_002", "res_user_mgmt"]
+}
+
+### 2. Create another Role (User)
+# @name createUserRole
+POST {{url}}/api/roles
+Content-Type: {{contentType}}
+Authorization: {{authToken}}
+
+{
+  "roleName": "Standard User",
+  "type": "user",
+  "isApprover": false,
+  "description": "Basic user access.",
+  "resourceIds": ["res_dashboard", "res_profile"]
+}
+
+### 3. Create a Role with Duplicate Name (Should Fail)
+POST {{url}}/api/roles
+Content-Type: {{contentType}}
+Authorization: {{authToken}}
+
+{
+  "roleName": "Global Administrator",
+  "type": "global",
+  "description": "Attempting duplicate name."
+}
+
+
+### 4. Get All Active Roles
+# @name getAllRoles
+GET {{url}}/api/roles
+Authorization: {{authToken}}
+
+
+### 5. Get Role By ID (using ID from createAdminRole response)
+# Note: Manually copy the 'id' from the response of "Create a new Role (Admin)"
+#       and paste it below, or use the REST Client's variable capture feature.
+# Example: @roleId = 665fdb1a1234567890abcdef
+# @prompt roleId Enter Role ID to fetch
+GET {{url}}/api/roles/{{roleId}}
+Authorization: {{authToken}}
+
+
+### 6. Get Role By Non-existent ID
+GET {{url}}/api/roles/nonexistent12345
+Authorization: {{authToken}}
+
+
+### 7. Update Role (using ID from createAdminRole response)
+# @prompt roleId Enter Role ID to update
+PUT {{url}}/api/roles/{{roleId}}
+Content-Type: {{contentType}}
+Authorization: {{authToken}}
+
+{
+  "roleName": "Global Administrator", # Keeping name same for this test
+  "description": "Full access to all system functions. (Updated description)",
+  "isApprover": false, # Change approver status
+  "resourceIds": ["res_001", "res_002", "res_user_mgmt", "res_audit_log"] # Add a resource
+}
+
+### 8. Update Role - Change Name to Existing (Should Fail)
+# Assumes "Standard User" role exists and uses the ID of "Global Administrator"
+# @prompt roleId Enter Role ID to update (e.g., the Admin role ID)
+PUT {{url}}/api/roles/{{roleId}}
+Content-Type: {{contentType}}
+Authorization: {{authToken}}
+
+{
+  "roleName": "Standard User", # Attempt to use existing name
+  "description": "Trying to conflict name."
+}
+
+### 9. Update Non-existent Role
+PUT {{url}}/api/roles/nonexistent12345
+Content-Type: {{contentType}}
+Authorization: {{authToken}}
+
+{
+  "description": "Attempting to update non-existent role."
+}
+
+
+### 10. Delete Role (Soft Delete - using ID from createAdminRole response)
+# @prompt roleId Enter Role ID to delete
+DELETE {{url}}/api/roles/{{roleId}}
+Authorization: {{authToken}}
+
+
+### 11. Try to Get Deleted Role By ID (Should Fail or return Not Found)
+# Use the same ID as in step 10
+# @prompt roleId Enter Role ID previously deleted
+GET {{url}}/api/roles/{{roleId}}
+Authorization: {{authToken}}
+
+
+### 12. Try to Delete Already Deleted Role
+# Use the same ID as in step 10
+# @prompt roleId Enter Role ID previously deleted
+DELETE {{url}}/api/roles/{{roleId}}
+Authorization: {{authToken}}
+
+
+### 13. Try to Delete Non-existent Role
+DELETE {{url}}/api/roles/nonexistent123456
+Authorization: {{authToken}}

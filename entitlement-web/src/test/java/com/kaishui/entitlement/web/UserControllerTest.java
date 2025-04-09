@@ -21,6 +21,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,7 +55,7 @@ class UserControllerTest {
     @Test
     void getAllUsers() {
         User userWithId = new User();
-        userWithId.setId(new ObjectId());
+        userWithId.setId(new ObjectId().toHexString());
         userWithId.setUsername("testuser");
         userWithId.setStaffId("12345");
         userWithId.setEmail("test@example.com");
@@ -84,14 +85,14 @@ class UserControllerTest {
     @Test
     void getUserById() {
         User userWithId = new User();
-        userWithId.setId(new ObjectId());
+        userWithId.setId(new ObjectId().toHexString());
         userWithId.setUsername("testuser");
         userWithId.setStaffId("12345");
         userWithId.setEmail("test@example.com");
         userWithId.setCreatedDate(new Date());
         userWithId.setLastModifiedDate(new Date());
         userWithId.setAdGroups(List.of("AD_Users"));
-        when(userService.getUserById(any(ObjectId.class))).thenReturn(Mono.just(userWithId));
+        when(userService.getUserById(anyString())).thenReturn(Mono.just(userWithId));
 
         webTestClient.get().uri("/v1/api/users/{id}", new ObjectId().toHexString())
                 .accept(MediaType.APPLICATION_JSON)
@@ -106,26 +107,26 @@ class UserControllerTest {
                     assertThat(actualUser.getEmail()).isEqualTo(user.getEmail());
                 });
 
-        verify(userService).getUserById(any(ObjectId.class));
+        verify(userService).getUserById(anyString());
     }
 
     @Test
     void getUserById_notFound() {
-        when(userService.getUserById(any(ObjectId.class))).thenReturn(Mono.empty());
+        when(userService.getUserById(anyString())).thenReturn(Mono.empty());
 
         webTestClient.get().uri("/v1/api/users/{id}", new ObjectId().toHexString())
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange()
                 .expectStatus().isNotFound();
 
-        verify(userService).getUserById(any(ObjectId.class));
+        verify(userService).getUserById(anyString());
     }
 
     @Test
     void createUser() {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         User userWithId = new User();
-        userWithId.setId(new ObjectId());
+        userWithId.setId(new ObjectId().toHexString());
         userWithId.setUsername("testuser");
         userWithId.setStaffId("12345");
         userWithId.setEmail("test@example.com");
@@ -185,7 +186,7 @@ class UserControllerTest {
     void updateUser() {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         User userWithId = new User();
-        userWithId.setId(new ObjectId());
+        userWithId.setId(new ObjectId().toHexString());
         userWithId.setUsername("testuser");
         userWithId.setStaffId("12345");
         userWithId.setEmail("test@example.com");
@@ -244,7 +245,7 @@ class UserControllerTest {
     @Test
     void updateUser_blankUsername() {
         User userWithBlankUsername = new User();
-        userWithBlankUsername.setId(new ObjectId());
+        userWithBlankUsername.setId(new ObjectId().toHexString());
         userWithBlankUsername.setUsername("");
         userWithBlankUsername.setStaffId("12345");
 
@@ -258,12 +259,12 @@ class UserControllerTest {
     @Test
     void deleteUser() {
         ObjectId userId = new ObjectId();
-        when(userService.deleteUser(userId)).thenReturn(Mono.empty());
+        when(userService.deleteUser(userId.toHexString())).thenReturn(Mono.empty());
         webTestClient.delete().uri("/v1/api/users/{id}", userId)
                 .exchange()
                 .expectStatus().isNoContent();
 
-        verify(userService).deleteUser(userId);
+        verify(userService).deleteUser(userId.toHexString());
     }
 
 }

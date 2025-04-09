@@ -9,6 +9,6 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 
 @Repository
-public interface GroupDefaultRoleRepository extends ReactiveMongoRepository<GroupDefaultRole, ObjectId> {
+public interface GroupDefaultRoleRepository extends ReactiveMongoRepository<GroupDefaultRole, String> {
     Flux<GroupDefaultRole> findByGroupNameIn(List<String> groupNames);
 }

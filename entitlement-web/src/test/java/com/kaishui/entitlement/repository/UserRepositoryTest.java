@@ -27,7 +27,7 @@ class UserRepositoryTest {
     @BeforeEach
     void setUp() {
         user = new User();
-        user.setId(new ObjectId());
+        user.setId(new ObjectId().toHexString());
         user.setUsername("testuser");
         user.setStaffId("12345");
         user.setEmail("test@example.com");

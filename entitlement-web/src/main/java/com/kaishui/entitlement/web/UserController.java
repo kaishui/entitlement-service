@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.bson.types.ObjectId;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +40,7 @@ public class UserController {
     })
     @GetMapping("/{id}")
     public Mono<ResponseEntity<User>> getUserById(@Parameter(description = "ID of the user to get", required = true) @PathVariable String id) {
-        return userService.getUserById(new ObjectId(id))
+        return userService.getUserById(id)
                 .map(ResponseEntity::ok)
                 .defaultIfEmpty(ResponseEntity.notFound().build());
     }
@@ -76,7 +75,7 @@ public class UserController {
     })
     @DeleteMapping("/{id}")
     public Mono<ResponseEntity<Void>> deleteUser(@Parameter(description = "ID of the user to delete", required = true) @PathVariable String id) {
-        return userService.deleteUser(new ObjectId(id))
+        return userService.deleteUser(id)
                 .then(Mono.just(ResponseEntity.noContent().<Void>build()));
     }
 }

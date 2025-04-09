@@ -18,7 +18,7 @@ import java.util.Map;
 @AllArgsConstructor
 public class AuditLogEntity {
     @Id
-    private ObjectId id;
+    private String id;
     private String action;
     private Map<String, Object> detail;
     private String createdBy;

@@ -1,7 +1,8 @@
 ## 1. User Collections
+
 ```
 {
-  "_id": ObjectId,
+  "_id": String,
   // MongoDB's default primary key
   "username": String,
   "staffId": String,
@@ -10,8 +11,8 @@
   "functionalManager": String,
   "entityManager": String,
   "jobTitle": String,
-  "status": String,
-  // e.g., "active", "inactive"
+  "isActive": boolean,
+  // e.g., true - "active", false - "inactive"
   "createdBy": String,
   "updatedBy": String,
   "createdDate": Date,
@@ -21,16 +22,17 @@
   ],
   // Array of AD group names (e.g., ["AD_Users", "AD_Developers"])
   "roleIds": [
-    ObjectId
+    String
   ]
   // Array of roleIds
 }
 ```
 
 ## 2. Role Collections
+
 ```
 {
-  "_id": ObjectId,
+  "_id": String,
   "roleName": String, // e.g., "Global Admin", "Regional Admin", "Approver", "User"
   "type": String, // e.g., "global", "regional", "user"
   "isApprover": Boolean, // Indicates if the role has approval permissions
@@ -40,8 +42,9 @@
   "createdDate": Date,
   "lastModifiedDate": Date
   "region": String, // e.g., "EMEA", "APAC", "NA"
-  "resourceIds": [ObjectId] // Array of resourceIds
-  // ... other role-related fields ...
+  "resourceIds": [String] // Array of resourceIds
+  "isActive": boolean,
+  // e.g., true - "active", false - "inactive"
 }
 ```
 
@@ -49,7 +52,7 @@
 
 ```
 {
-  "_id": ObjectId,
+  "_id": String,
   "name": String, // e.g., "User Management Page", "Product Catalog"
   "permission": Document, // e.g., "GET /users/*", "POST /products", "xxPage.button.view", {date: 20250101} , [{jobStatus: "pending"}, {jobStatus: "completed"}]
   "type": String, // e.g., "page", "button", "api", condition
@@ -58,15 +61,20 @@
   "updatedBy": String,
   "createdDate": Date,
   "lastModifiedDate": Date
+  "isActive": boolean,
+  // e.g., true - "active", false - "inactive"
+  "region": String, // e.g., "uk", "sg", "hk"
+
 }
 ```
 
 ## 4. Group default role Collection
+
 ```
 {
-  "_id": ObjectId,
+  "_id": String,
   "groupName": String, // AD group name (e.g., "AD_Approvers", "AD_Users")
-  "roleId": [ObjectId], // Reference to a document in the `roles` collection
+  "roleId": [String], // Reference to a document in the `roles` collection
   "createdBy": String,
   "updatedBy": String,
   "createdDate": Date,
@@ -76,12 +84,11 @@
 
 ```
 
-
-
 ## 6. Audit Log Collections
+
 ```
 {
-  "_id": ObjectId,
+  "_id": String,
   "userId": String, // Reference to a document in the `users` collection staff id
   "action": String, // e.g., "user_created", "role_assigned", "resource_accessed"
   "detail": Document,
@@ -89,6 +96,7 @@
   "updatedBy": String,
   "createdDate": Date,
   "lastModifiedBy": String
-  // ... other audit-log-related fields ...
-}
+   "isActive": boolean,
+  // e.g., true - "active", false - "inactive"
+  }
 ```
