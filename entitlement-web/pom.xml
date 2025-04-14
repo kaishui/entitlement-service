@@ -105,4 +105,22 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>3.4.4</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal> <!-- This goal creates the executable JAR -->
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Other plugins -->
+        </plugins>
+    </build>
+
 </project>
