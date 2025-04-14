@@ -100,3 +100,63 @@
   // e.g., true - "active", false - "inactive"
   }
 ```
+
+## 7. hierarchy approval Collections
+```
+{
+  "_id": String,
+  "groupName": String, // AD group name (e.g., "AD_Approvers", "AD_Users")
+  "parentGroupName": String, // Parent AD group name (e.g., "AD_Global_Approvers")
+  "level": Number, // Hierarchy level (e.g., 0 for root, 1 for first level, etc.)
+  "createdBy": String,
+  "updatedBy": String,
+  "createdDate": Date,
+  "lastModifiedDate": Date,
+  "isActive": Boolean // e.g., true - "active", false - "inactive"
+}
+
+```
+
+eg:
+假设我们有以下层级关系：
+AD_Global_Approvers (根节点)
+    -- AD_Regional_Approvers (第一级子节点)
+        -- AD_Country_Approvers (第二级子节点)
+```json
+[
+  {
+    "_id": "1",
+    "groupName": "AD_Global_Approvers",
+    "parentGroupName": null,
+    "level": 0,
+    "createdBy": "admin",
+    "updatedBy": "admin",
+    "createdDate": ISODate("2023-10-01T00:00:00Z"),
+    "lastModifiedDate": ISODate("2023-10-01T00:00:00Z"),
+    "isActive": true
+  },
+  {
+    "_id": "2",
+    "groupName": "AD_Regional_Approvers",
+    "parentGroupName": "AD_Global_Approvers",
+    "level": 1,
+    "createdBy": "admin",
+    "updatedBy": "admin",
+    "createdDate": ISODate("2023-10-01T00:00:00Z"),
+    "lastModifiedDate": ISODate("2023-10-01T00:00:00Z"),
+    "isActive": true
+  },
+  {
+    "_id": "3",
+    "groupName": "AD_Country_Approvers",
+    "parentGroupName": "AD_Regional_Approvers",
+    "level": 2,
+    "createdBy": "admin",
+    "updatedBy": "admin",
+    "createdDate": ISODate("2023-10-01T00:00:00Z"),
+    "lastModifiedDate": ISODate("2023-10-01T00:00:00Z"),
+    "isActive": true
+  }
+]
+
+```
