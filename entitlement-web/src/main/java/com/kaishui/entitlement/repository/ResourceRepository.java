@@ -18,5 +18,5 @@ public interface ResourceRepository extends ReactiveMongoRepository<Resource, St
     Flux<Resource> findByAdGroupsInAndIsActive(List<String> adGroups, boolean isActive);
     Flux<Resource> findByAdGroupsIn(List<String> adGroups);//add
 
-    Flux<Resource> findAllByIdInAndTypeAndIsActive(List<String> resourceIds, String uri, boolean isActive);
+    Flux<Resource> findAllByIdInAndTypeAndIsActive(List<String> resourceIds, String type, boolean isActive);
 }

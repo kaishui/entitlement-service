@@ -1,6 +1,7 @@
 package com.kaishui.entitlement.service;
 
 import com.kaishui.entitlement.annotation.AuditLog;
+import com.kaishui.entitlement.constant.ResouceType;
 import com.kaishui.entitlement.entity.dto.CreateResourceDto;
 import com.kaishui.entitlement.entity.dto.ResourceDto;
 import com.kaishui.entitlement.entity.dto.UpdateResourceDto;
@@ -10,12 +11,17 @@ import com.kaishui.entitlement.util.ResourceMapper; // Using MapStruct (recommen
 import com.kaishui.entitlement.repository.ResourceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.Document;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional; // Optional for consistency if needed
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -112,5 +118,41 @@ public class ResourceService {
                 .doOnSuccess(v -> log.info("Successfully deleted resource ID: {}", id))
                 .doOnError(ResourceNotFoundException.class, e -> log.warn("Resource deletion failed: {}", e.getMessage()))
                 .doOnError(e -> !(e instanceof ResourceNotFoundException), e -> log.error("Error deleting resource ID {}: {}", id, e.getMessage(), e));
+    }
+
+    /**
+     * Finds all resources matching the given IDs and type 'CONDITION',
+     * extracts their permission documents, and returns them as a single set.
+     *
+     * @param resourceIds A list of resource IDs to search for.
+     * @return A Mono emitting a Set containing all unique permission Documents found,
+     *         or an empty Set if no matching resources or permissions are found.
+     */
+    public Mono<Set<Document>> getConditionPermissionsForResources(List<String> resourceIds) {
+        if (CollectionUtils.isEmpty(resourceIds)) {
+            log.debug("Resource ID list is empty, returning empty set of permissions.");
+            return Mono.just(Collections.emptySet()); // Return empty set if no IDs provided
+        }
+
+        log.debug("Fetching CONDITION permissions for resource IDs: {}", resourceIds);
+
+        // Use the appropriate repository method (adjust if you need isActive filter)
+        // Assuming you added findAllByIdInAndType:
+        return resourceRepository.findAllByIdInAndTypeAndIsActive(resourceIds, ResouceType.CONDITION.name(), true)
+                // Alternative if you only have findAllByIdInAndTypeAndIsActive and want active ones:
+                // return resourceRepository.findAllByIdInAndTypeAndIsActive(resourceIds, ResouceType.CONDITION.name(), true)
+
+                // Filter out resources that don't have permissions (optional but good practice)
+                .filter(resource -> !CollectionUtils.isEmpty(resource.getPermission()))
+                // Get the list of permission documents from each resource
+                .map(Resource::getPermission)
+                // Flatten the Flux<List<Document>> into a Flux<Document>
+                .flatMap(Flux::fromIterable)
+                // Collect all unique documents into a Set
+                .collect(Collectors.toSet()) // collectList().map(HashSet::new) also works
+                .doOnSuccess(permissionSet -> log.info("Collected {} unique CONDITION permission documents for resource IDs: {}", permissionSet.size(), resourceIds))
+                .doOnError(e -> log.error("Error fetching CONDITION permissions for resource IDs {}: {}", resourceIds, e.getMessage(), e))
+                // If the stream is empty (no matching resources or permissions), return an empty set
+                .defaultIfEmpty(Collections.emptySet());
     }
 }

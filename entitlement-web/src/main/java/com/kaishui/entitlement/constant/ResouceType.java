@@ -22,5 +22,7 @@ public enum ResouceType {
      * Represents an interactive element within a user interface, like a button or link.
      * Permissions might control whether the element is visible, enabled, or clickable.
      */
-    BUTTON
+    BUTTON,
+
+    CONDITION
 }

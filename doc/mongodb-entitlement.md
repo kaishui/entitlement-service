@@ -44,7 +44,8 @@
   "region": String, // e.g., "EMEA", "APAC", "NA"
   "resourceIds": [String] // Array of resourceIds
   "isActive": boolean,
-  // e.g., true - "active", false - "inactive"
+  // e.g., true - "active", false - "inactive",
+  bypassRules: [String] // optional: Array of bypass rule names, /admin/**
 }
 ```
 
