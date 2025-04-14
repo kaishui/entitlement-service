@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional; // Optional for
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -38,8 +40,8 @@ public class ResourceService {
                 .doOnError(e -> log.error("Error creating resource: {}", e.getMessage(), e));
     }
 
-    public Flux<ResourceDto> findResources(String name, String type, String region, Boolean isActive) {
-        log.debug("Searching resources - Name: '{}', Type: '{}', Region: '{}', Active: {}", name, type, region, isActive);
+    public Flux<ResourceDto> findResources(String name, String type, List<String> adGroups, Boolean isActive) {
+        log.debug("Searching resources - Name: '{}', Type: '{}', Region: '{}', Active: {}", name, type, adGroups, isActive);
 
         // Start with a base Flux (e.g., find by active status if provided, else find all)
         Flux<Resource> results = (isActive != null)
@@ -56,8 +58,9 @@ public class ResourceService {
         if (type != null && !type.isBlank()) {
             results = results.filter(r -> type.equalsIgnoreCase(r.getType()));
         }
-        if (region != null && !region.isBlank()) {
-            results = results.filter(r -> region.equalsIgnoreCase(r.getRegion()));
+        if (adGroups != null && !adGroups.isEmpty()) {
+            // Use the new repository method
+            results = results.filter(r-> r.getAdGroups() != null && !r.getAdGroups().isEmpty() && !java.util.Collections.disjoint(r.getAdGroups(),adGroups));
         }
         // isActive filter is already applied at the start if provided
 

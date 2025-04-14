@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/v1/api/resources") // Base path for resource endpoints
 @RequiredArgsConstructor
@@ -55,12 +57,12 @@ public class ResourceController {
             @RequestParam(required = false) String name,
             @Parameter(description = "Filter by resource type (exact match)")
             @RequestParam(required = false) String type,
-            @Parameter(description = "Filter by resource region (exact match)")
-            @RequestParam(required = false) String region,
+            @Parameter(description = "Filter by AD groups (exact match)")
+            @RequestParam(required = false) List<String> adGroups,
             @Parameter(description = "Filter by active status (true or false)")
             @RequestParam(required = false) Boolean isActive) {
         // Service method handles the filtering logic
-        return resourceService.findResources(name, type, region, isActive);
+        return resourceService.findResources(name, type, adGroups, isActive);
     }
 
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)

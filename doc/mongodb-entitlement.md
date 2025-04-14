@@ -63,7 +63,7 @@
   "lastModifiedDate": Date
   "isActive": boolean,
   // e.g., true - "active", false - "inactive"
-  "region": String, // e.g., "uk", "sg", "hk"
+  "adGroups": List<String>, // e.g., ["uk-admin", "sg-regional-user", "hk-user"]
 
 }
 ```

@@ -20,7 +20,7 @@ public class AuditLogEntity {
     @Id
     private String id;
     private String action;
-    private Map<String, Object> detail;
+    private org.bson.Document detail;
     private String createdBy;
     private Date createdDate;
 }

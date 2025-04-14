@@ -1,7 +1,8 @@
 package com.kaishui.entitlement.repository;
 
 import com.kaishui.entitlement.entity.AuditLogEntity;
-import org.bson.types.ObjectId; // Still useful for generating unique String IDs
+import org.bson.Document;
+import org.bson.types.ObjectId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,48 +14,49 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.junit.jupiter.api.Assertions.*;
 
-@ExtendWith(MockitoExtension.class) // Use Mockito extension for JUnit 5
+@ExtendWith(MockitoExtension.class)
 class AuditLogRepositoryTest {
 
-    @Mock // Create a mock instance of the repository
+    @Mock
     private AuditLogRepository auditLogRepository;
 
     private AuditLogEntity log1;
     private AuditLogEntity log2;
-    private String log1Id; // ID is String, matching the repository interface
+    private String log1Id;
 
     @BeforeEach
     void setUp() {
-        // Generate a unique String ID using ObjectId's hex representation
         log1Id = new ObjectId().toHexString();
-        Map<String, Object> details1 = new HashMap<>();
-        details1.put("userId", "user123");
-        details1.put("roleId", "roleABC");
+
+        // Use org.bson.Document for details1
+        Document details1 = new Document()
+                .append("userId", "user123")
+                .append("roleId", "roleABC");
 
         log1 = AuditLogEntity.builder()
-                .id(log1Id) // Use the String ID
+                .id(log1Id)
                 .action("CREATE_ROLE")
-                .detail(details1)
+                .detail(details1) // Assign the Document
                 .createdBy("adminUser")
                 .createdDate(new Date())
                 .build();
 
-        Map<String, Object> details2 = new HashMap<>();
-        details2.put("userId", "user456");
-        details2.put("status", "inactive");
+        // Use org.bson.Document for details2
+        Document details2 = new Document()
+                .append("userId", "user456")
+                .append("status", "inactive");
 
         log2 = AuditLogEntity.builder()
-                .id(new ObjectId().toHexString()) // Another String ID
+                .id(new ObjectId().toHexString())
                 .action("DELETE_USER")
-                .detail(details2)
+                .detail(details2) // Assign the Document
                 .createdBy("system")
                 .createdDate(new Date(System.currentTimeMillis() - 10000))
                 .build();
@@ -63,98 +65,99 @@ class AuditLogRepositoryTest {
     @Test
     @DisplayName("Should simulate saving an audit log successfully")
     void saveAuditLog() {
-        // Arrange: Define mock behavior for save
-        // When save is called with any AuditLogEntity, return a Mono containing our pre-built log1
+        // Arrange
         when(auditLogRepository.save(any(AuditLogEntity.class))).thenReturn(Mono.just(log1));
 
-        // Act: Call the mocked repository method (pass the object to be "saved")
+        // Act
         Mono<AuditLogEntity> saveMono = auditLogRepository.save(log1);
 
-        // Assert: Verify the result using StepVerifier
+        // Assert
         StepVerifier.create(saveMono)
                 .assertNext(savedLog -> {
-                    assertEquals(log1Id, savedLog.getId()); // Check if String ID matches
+                    assertEquals(log1Id, savedLog.getId());
                     assertEquals("CREATE_ROLE", savedLog.getAction());
                     assertEquals("adminUser", savedLog.getCreatedBy());
                     assertNotNull(savedLog.getDetail());
-                    assertEquals("user123", savedLog.getDetail().get("userId"));
+                    // Access data using Document's get method
+                    assertEquals("user123", savedLog.getDetail().getString("userId"));
+                    assertEquals("roleABC", savedLog.getDetail().getString("roleId")); // Example if roleId is String
                 })
                 .verifyComplete();
 
-        // Verify that save was called on the mock exactly once with any AuditLogEntity
+        // Verify
         verify(auditLogRepository).save(any(AuditLogEntity.class));
     }
 
     @Test
     @DisplayName("Should simulate finding an audit log by ID")
     void findById() {
-        // Arrange: Define mock behavior for findById with the String ID
+        // Arrange
         when(auditLogRepository.findById(log1Id)).thenReturn(Mono.just(log1));
 
-        // Act: Call the mocked method
+        // Act
         Mono<AuditLogEntity> findMono = auditLogRepository.findById(log1Id);
 
-        // Assert: Verify the result
+        // Assert
         StepVerifier.create(findMono)
-                .expectNext(log1) // Expect the mocked log1 object
+                .expectNext(log1)
                 .verifyComplete();
 
-        // Verify findById was called with the correct String ID
+        // Verify
         verify(auditLogRepository).findById(log1Id);
     }
 
     @Test
     @DisplayName("Should simulate returning empty Mono when finding by non-existent ID")
     void findById_NotFound() {
-        // Arrange: Define mock behavior for a non-existent String ID
+        // Arrange
         String nonExistentId = new ObjectId().toHexString();
         when(auditLogRepository.findById(nonExistentId)).thenReturn(Mono.empty());
 
-        // Act: Call the mocked method
+        // Act
         Mono<AuditLogEntity> findMono = auditLogRepository.findById(nonExistentId);
 
-        // Assert: Verify that nothing is emitted
+        // Assert
         StepVerifier.create(findMono)
-                .expectNextCount(0) // Expect no log to be emitted
+                .expectNextCount(0)
                 .verifyComplete();
 
-        // Verify findById was called with the non-existent String ID
+        // Verify
         verify(auditLogRepository).findById(nonExistentId);
     }
 
     @Test
     @DisplayName("Should simulate finding all audit logs")
     void findAllAuditLogs() {
-        // Arrange: Define mock behavior for findAll
+        // Arrange
         when(auditLogRepository.findAll()).thenReturn(Flux.just(log1, log2));
 
-        // Act: Call the mocked method
+        // Act
         Flux<AuditLogEntity> findAllFlux = auditLogRepository.findAll();
 
-        // Assert: Verify the emitted logs
+        // Assert
         StepVerifier.create(findAllFlux)
                 .expectNext(log1)
                 .expectNext(log2)
                 .verifyComplete();
 
-        // Verify findAll was called
+        // Verify
         verify(auditLogRepository).findAll();
     }
 
     @Test
     @DisplayName("Should simulate deleting an audit log by ID")
     void deleteById() {
-        // Arrange: Define mock behavior for deleteById (returns Mono<Void>) with the String ID
-        when(auditLogRepository.deleteById(log1Id)).thenReturn(Mono.empty()); // Return an empty Mono to signify completion
+        // Arrange
+        when(auditLogRepository.deleteById(log1Id)).thenReturn(Mono.empty());
 
-        // Act: Call the mocked method
+        // Act
         Mono<Void> deleteMono = auditLogRepository.deleteById(log1Id);
 
-        // Assert: Verify that the Mono completes successfully
+        // Assert
         StepVerifier.create(deleteMono)
                 .verifyComplete();
 
-        // Verify deleteById was called with the correct String ID
+        // Verify
         verify(auditLogRepository).deleteById(log1Id);
     }
 }

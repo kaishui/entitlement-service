@@ -41,6 +41,9 @@ class UserServiceTest {
 
     @InjectMocks
     private UserService userService;
+    @Mock
+    private AuthorizationUtil authorizationUtil;
+
 
     private MockedStatic<AuthorizationUtil> mockedAuthorizationUtil;
 
@@ -82,12 +85,12 @@ class UserServiceTest {
         groupRole2 = GroupDefaultRole.builder().groupName(adGroup2).roleIds(List.of(roleId2, roleId3)).build();
 
 
-        // Mock the static method AuthorizationUtil.extractUsernameFromContext
+        // Mock the static method authorizationUtil.extractUsernameFromContext
         mockedAuthorizationUtil = Mockito.mockStatic(AuthorizationUtil.class);
-        mockedAuthorizationUtil.when(() -> AuthorizationUtil.extractUsernameFromContext(any(Context.class)))
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(Context.class)))
                 .thenReturn(testUsername);
         // Also mock the ContextView variant if used internally by your actual util or tests
-        mockedAuthorizationUtil.when(() -> AuthorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
                 .thenReturn(testUsername);
     }
 

@@ -1,5 +1,6 @@
 package com.kaishui.entitlement.aop;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kaishui.entitlement.annotation.AuditLog;
 import com.kaishui.entitlement.entity.AuditLogEntity;
 import com.kaishui.entitlement.repository.AuditLogRepository;
@@ -11,14 +12,17 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.bson.Document;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Aspect
 @Component
@@ -27,46 +31,41 @@ import java.util.Map;
 public class AuditLogAspect {
 
     private final AuditLogRepository auditLogRepository;
+    private final ObjectMapper objectMapper;
+    private final AuthorizationUtil authorizationUtil;
+
 
     @Pointcut("@annotation(com.kaishui.entitlement.annotation.AuditLog)")
     public void auditLogPointcut() {
     }
 
-    // Use @Around advice
+    // auditLogAround remains largely the same, just ensure it calls the updated prepareAuditDetailsAsBson
     @Around("auditLogPointcut()")
-    public Object auditLogAround(ProceedingJoinPoint pjp) throws Throwable { // Must accept ProceedingJoinPoint
+    public Object auditLogAround(ProceedingJoinPoint pjp) throws Throwable {
         MethodSignature signature = (MethodSignature) pjp.getSignature();
         Method method = signature.getMethod();
         AuditLog auditLogAnnotation = method.getAnnotation(AuditLog.class);
         String action = auditLogAnnotation.action();
 
-        // Proceed with the original method execution
-        Object result = pjp.proceed(); // This returns the Mono/Flux or other object from the original method
+        Object result = pjp.proceed();
 
-        // Check if the result is a reactive type (Mono or Flux)
         if (result instanceof Mono) {
-            // If it's a Mono, attach the logging logic
             return ((Mono<?>) result)
-                    .doOnSuccess(successResult -> { // Log only on successful completion
-                        // Prepare details *after* successful execution
-                        Map<String, Object> details = prepareAuditDetails(pjp, successResult, signature);
-                        // Perform the logging within doOnSuccess, using deferContextual
-                        saveAuditLog(action, details).subscribe( // Subscribe here to trigger save
-                                null, // No value expected on success
-                                error -> log.error("Error saving audit log reactively for action: {}", action, error) // Log errors from saving
+                    .doOnSuccess(successResult -> {
+                        Document details = prepareAuditDetailsAsBson(pjp, successResult, signature);
+                        saveAuditLog(action, details).subscribe(
+                                null,
+                                error -> log.error("Error saving audit log reactively for action: {}", action, error)
                         );
                     })
-                    // Optionally add doOnError if you want to log failures of the main operation
                     .doOnError(error -> log.error("Original method for action '{}' failed: {}", action, error.getMessage()));
 
         } else if (result instanceof Flux) {
-            // If it's a Flux, attach the logging logic (logging usually happens on completion)
-            // This example logs *after* the Flux completes successfully.
-            // Logging individual elements might require different logic (e.g., doOnNext).
+            // For Flux, consider if logging on complete is sufficient, or if you need details per item (more complex)
             return ((Flux<?>) result)
-                    .doOnComplete(() -> { // Log when the Flux completes successfully
-                        // Prepare details (result here might be less meaningful for a Flux, maybe log count?)
-                        Map<String, Object> details = prepareAuditDetails(pjp, "[Flux Completed]", signature); // Represent Flux completion
+                    .doOnComplete(() -> {
+                        // Details might only contain parameters here, as the result is a stream
+                        Document details = prepareAuditDetailsAsBson(pjp, "[Flux Completed]", signature);
                         saveAuditLog(action, details).subscribe(
                                 null,
                                 error -> log.error("Error saving audit log reactively for action: {}", action, error)
@@ -74,63 +73,114 @@ public class AuditLogAspect {
                     })
                     .doOnError(error -> log.error("Original method for action '{}' failed: {}", action, error.getMessage()));
         } else {
-            // If the result is not reactive, log synchronously (less common in WebFlux)
-            // This part might need adjustment based on whether non-reactive methods are annotated
+            // Handle non-reactive results (if applicable)
             log.warn("Method annotated with @AuditLog did not return a reactive type. Logging synchronously.");
-            Map<String, Object> details = prepareAuditDetails(pjp, result, signature);
-            // Synchronous logging might block, consider if this is acceptable
+            Document details = prepareAuditDetailsAsBson(pjp, result, signature);
             saveAuditLog(action, details).block(); // Blocking call - use with caution!
             return result;
         }
     }
 
-    // Renamed from auditLog to saveAuditLog for clarity
-    private Mono<Void> saveAuditLog(String action, Map<String, Object> details) {
+
+    private Mono<Void> saveAuditLog(String action, Document details) {
         return Mono.deferContextual(contextView -> {
-                    String username = AuthorizationUtil.extractUsernameFromContext(contextView);
+                    String username = authorizationUtil.extractUsernameFromContext(contextView);
                     log.info("Preparing to save audit log for action: {}, username: {}", action, username);
                     AuditLogEntity auditLogEntity = AuditLogEntity.builder()
                             .action(action)
-                            .detail(details)
+                            .detail(details) // Assign the BSON Document directly
                             .createdBy(username)
                             .createdDate(new Date())
                             .build();
-                    // The save operation itself is reactive
                     return auditLogRepository.save(auditLogEntity);
                 })
                 .doOnError(error -> log.error("Failed during audit log save preparation for action: {}", action, error))
-                .then(); // Convert Mono<AuditLogEntity> to Mono<Void>
+                .then();
     }
 
-    // Updated prepareAuditDetails to accept ProceedingJoinPoint
-    private Map<String, Object> prepareAuditDetails(ProceedingJoinPoint pjp, Object result, MethodSignature signature) {
-        Map<String, Object> details = new HashMap<>();
-        Object[] args = pjp.getArgs(); // Get args from ProceedingJoinPoint
+    private Document prepareAuditDetailsAsBson(ProceedingJoinPoint pjp, Object result, MethodSignature signature) {
+        Document details = new Document();
+        Object[] args = pjp.getArgs();
         String[] parameterNames = signature.getParameterNames();
 
-        // Add parameters map directly
         if (args.length > 0 && parameterNames.length == args.length) {
-            Map<String, Object> parametersMap = new HashMap<>();
+            Document parametersDoc = new Document();
             for (int i = 0; i < args.length; i++) {
-                // Consider filtering sensitive parameters (e.g., passwords)
-                // Ensure args[i] is serializable by Jackson/BSON codec
-                parametersMap.put(parameterNames[i], args[i]);
+                // Convert parameter to BSON-compatible format
+                parametersDoc.put(parameterNames[i], convertToBsonCompatible(args[i]));
             }
-            details.put("parameters", parametersMap); // Store the map directly
+            details.put("parameters", parametersDoc);
         } else if (args.length > 0) {
-            // Fallback: Store the args array directly (less structured)
-            // Ensure elements in args are serializable
-            details.put("parameters", args);
+            // Fallback if parameter names couldn't be retrieved
+            details.put("parameters", convertToBsonCompatible(List.of(args))); // Convert the list itself
         }
-        log.info("AditLog - Parameters map: {}", details.get("parameters"));
 
-//        // Add result object directly if not null
-//        if (result != null) {
-//            // Ensure the result object is serializable
-//            // Be cautious about storing very large result objects
-//            details.put("result", result); // Store the result object directly
-//        }
+        // Note: For large results, you might want to omit them or store only a summary
+        // if (result != null && !(result instanceof String && "[Flux Completed]".equals(result))) {
+        //     details.put("result", convertToBsonCompatible(result));
+        // }
 
+        log.debug("AuditLog - Parameters doc: {}", details.get("parameters")); // Use debug level
         return details;
     }
+
+    private Object convertToBsonCompatible(Object obj) {
+        if (obj == null) {
+            return null;
+        }
+
+        // Check for standard BSON types (add more as needed)
+        if (obj instanceof String || obj instanceof Number || obj instanceof Boolean || obj instanceof Date || obj instanceof Document || obj instanceof byte[]) {
+            return obj;
+        }
+
+        // Handle Collections (like List, Set)
+        if (obj instanceof Collection<?> collection) {
+            // Recursively convert elements in the collection
+            return collection.stream()
+                    .map(this::convertToBsonCompatible)
+                    .collect(Collectors.toList());
+        }
+
+        // Handle Maps
+        if (obj instanceof Map<?, ?> map) {
+            Document mapDoc = new Document();
+            map.forEach((key, value) -> {
+                // Convert key to String if it's not already
+                String keyStr = (key instanceof String) ? (String) key : String.valueOf(key);
+                // Recursively convert value
+                mapDoc.put(keyStr, convertToBsonCompatible(value));
+            });
+            return mapDoc;
+        }
+
+        // Handle reactive types (extract value if possible, or represent as string)
+        // Be cautious here, blocking inside an aspect is generally bad.
+        // This example just represents them as strings. A better approach might involve
+        // modifying the aspect logic to handle Mono/Flux parameters differently.
+        if (obj instanceof Mono) {
+            return "[Mono Parameter]"; // Avoid blocking to get value
+        }
+        if (obj instanceof Flux) {
+            return "[Flux Parameter]"; // Avoid blocking
+        }
+
+
+        // --- Attempt JSON serialization for complex objects ---
+        try {
+            // Convert the object to a Map (which Jackson can often do)
+            // Map<String, Object> objectMap = objectMapper.convertValue(obj, Map.class);
+            // return new Document(objectMap); // Convert the Map to a BSON Document
+
+            // Alternative: Convert directly to JSON String
+            return objectMapper.writeValueAsString(obj);
+
+        } catch (Exception e) { // Catch broader exceptions during conversion/serialization
+            log.warn("Could not convert object of type {} to BSON-compatible format for audit log: {}", obj.getClass().getName(), e.getMessage());
+            // Fallback to toString() or a placeholder
+            return "[Unserializable Object: " + obj.getClass().getSimpleName() + "]";
+            // return obj.toString(); // Use with caution, toString() might be huge or unhelpful
+        }
+    }
+
 }

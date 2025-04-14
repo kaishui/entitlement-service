@@ -22,6 +22,8 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final AuthorizationUtil authorizationUtil;
+
 
     private final GroupDefaultRoleRepository groupDefaultRoleRepository;
 
@@ -56,7 +58,7 @@ public class UserService {
 
         // Use deferContextual to get the username for the 'updatedBy' field
         return Mono.deferContextual(contextView -> {
-            String updatedByUsername = AuthorizationUtil.extractUsernameFromContext(contextView);
+            String updatedByUsername = authorizationUtil.extractUsernameFromContext(contextView);
 
             return userRepository.findByStaffId(user.getStaffId())
                     .flatMap(existingUser -> { // Use flatMap for async operations
@@ -120,7 +122,7 @@ public class UserService {
         log.info("Attempting to soft delete user with id: {}", id);
         // Use deferContextual to get the username for 'updatedBy'
         return Mono.deferContextual(contextView -> {
-            String deletedByUsername = AuthorizationUtil.extractUsernameFromContext(contextView);
+            String deletedByUsername = authorizationUtil.extractUsernameFromContext(contextView);
 
             // Find the user by ID (assuming repository uses String ID)
             return userRepository.findById(id)

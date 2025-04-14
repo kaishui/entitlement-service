@@ -33,7 +33,7 @@ public class Resource {
 
     private String type; // e.g., "page", "button", "api", "condition"
     private String description;
-    private String region; // e.g., "uk", "sg", "hk"
+    private List<String> adGroups;
 
     @Builder.Default // Ensure default value is set by Lombok builder
     private Boolean isActive = true;

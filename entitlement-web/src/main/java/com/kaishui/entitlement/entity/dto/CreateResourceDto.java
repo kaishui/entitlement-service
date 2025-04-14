@@ -33,9 +33,8 @@ public class CreateResourceDto {
     @Schema(description = "Optional description of the resource", example = "API endpoint for product data")
     private String description;
 
-    @Size(max = 50, message = "Region cannot exceed 50 characters")
-    @Schema(description = "Optional region for the resource", example = "uk")
-    private String region;
+    @Schema(description = "adGroups associated with the resource", example = "[\"uk-admin\", \"sg-user\"]")
+    private List<String> adGroups;
 
     @Schema(description = "Set whether the resource is active (defaults to true)", example = "true")
     private Boolean isActive = true; // Default value

@@ -18,6 +18,7 @@ import java.util.Date;
 public class RoleService {
 
     private final RoleRepository roleRepository;
+    private final AuthorizationUtil authorizationUtil;
 
     /**
      * Get all active roles.
@@ -44,7 +45,7 @@ public class RoleService {
         log.info("Attempting to create role: {}", role.getRoleName());
         // Use deferContextual to get the username for 'createdBy'
         return Mono.deferContextual(contextView -> {
-            String createdByUsername = AuthorizationUtil.extractUsernameFromContext(contextView);
+            String createdByUsername = authorizationUtil.extractUsernameFromContext(contextView);
 
             // Check if role name already exists
             return roleRepository.existsByRoleName(role.getRoleName())
@@ -75,7 +76,7 @@ public class RoleService {
         log.info("Attempting to update role with id: {}", id);
         // Use deferContextual to get the username for 'updatedBy'
         return Mono.deferContextual(contextView -> {
-            String updatedByUsername = AuthorizationUtil.extractUsernameFromContext(contextView);
+            String updatedByUsername = authorizationUtil.extractUsernameFromContext(contextView);
 
             return roleRepository.findById(id)
                     .flatMap(existingRole -> {
@@ -136,7 +137,7 @@ public class RoleService {
         log.info("Attempting to soft delete role with id: {}", id);
         // Use deferContextual to get the username for 'updatedBy'
         return Mono.deferContextual(contextView -> {
-            String deletedByUsername = AuthorizationUtil.extractUsernameFromContext(contextView);
+            String deletedByUsername = authorizationUtil.extractUsernameFromContext(contextView);
 
             return roleRepository.findById(id)
                     .switchIfEmpty(Mono.error(new CommonException("Role not found for deletion with id: " + id)))

@@ -1,6 +1,7 @@
 package com.kaishui.entitlement.entity.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,7 +15,8 @@ import java.util.List;
 public class UpdateResourceDto {
     // Fields are optional for partial updates, but validated if present
 
-    @Size(max = 100, message = "Resource name cannot exceed 100 characters")
+    @NotBlank(message = "Resource name cannot be blank if provided for update")
+    @Size(min = 1, max = 100, message = "Resource name cannot exceed 100 characters")
     @Schema(description = "Updated name of the resource", example = "Product Catalog API v2")
     private String name;
 
@@ -30,9 +32,8 @@ public class UpdateResourceDto {
     @Schema(description = "Updated description", example = "API endpoint for product data (version 2)")
     private String description;
 
-    @Size(max = 50, message = "Region cannot exceed 50 characters")
-    @Schema(description = "Updated region", example = "emea")
-    private String region;
+    @Schema(description = "adGroups associated with the resource", example = "[\"uk-admin\", \"sg-user\"]")
+    private List<String> adGroups;
 
     @Schema(description = "Updated active status", example = "false")
     private Boolean isActive;
