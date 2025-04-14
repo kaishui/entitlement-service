@@ -1,7 +1,7 @@
 package com.kaishui.entitlement.service;
 
 import com.kaishui.entitlement.annotation.AuditLog;
-import com.kaishui.entitlement.constant.ResouceType;
+import com.kaishui.entitlement.constant.ResourceType;
 import com.kaishui.entitlement.entity.dto.CreateResourceDto;
 import com.kaishui.entitlement.entity.dto.ResourceDto;
 import com.kaishui.entitlement.entity.dto.UpdateResourceDto;
@@ -138,7 +138,7 @@ public class ResourceService {
 
         // Use the appropriate repository method (adjust if you need isActive filter)
         // Assuming you added findAllByIdInAndType:
-        return resourceRepository.findAllByIdInAndTypeAndIsActive(resourceIds, ResouceType.CONDITION.name(), true)
+        return resourceRepository.findAllByIdInAndTypeAndIsActive(resourceIds, ResourceType.CONDITION.name(), true)
                 // Alternative if you only have findAllByIdInAndTypeAndIsActive and want active ones:
                 // return resourceRepository.findAllByIdInAndTypeAndIsActive(resourceIds, ResouceType.CONDITION.name(), true)
 

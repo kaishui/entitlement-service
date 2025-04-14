@@ -2,7 +2,7 @@ package com.kaishui.entitlement.service;
 
 
 import com.kaishui.entitlement.constant.PermissionFieldConstant;
-import com.kaishui.entitlement.constant.ResouceType;
+import com.kaishui.entitlement.constant.ResourceType;
 import com.kaishui.entitlement.entity.Resource;
 import com.kaishui.entitlement.entity.User; // Assuming you have a User entity
 import com.kaishui.entitlement.repository.ResourceRepository;
@@ -64,7 +64,7 @@ public class UriPermissionCheckerService implements PermissionCheckerInterface {
                                     return Flux.empty(); // No resources in this role
                                 }
                                 // Fetch only URI resources associated with this role
-                                return resourceRepository.findAllByIdInAndTypeAndIsActive(role.getResourceIds(), ResouceType.API.name(), true);
+                                return resourceRepository.findAllByIdInAndTypeAndIsActive(role.getResourceIds(), ResourceType.API.name(), true);
                             })
                             // Filter resources: Must have at least one AD Group matching the user's AD Groups
                             .filter(resource -> checkAdGroupIntersection(user, resource));

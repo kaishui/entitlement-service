@@ -4,7 +4,7 @@ package com.kaishui.entitlement.constant;
  * Defines the different types of resources that can be managed
  * for entitlement purposes.
  */
-public enum ResouceType {
+public enum ResourceType {
     /**
      * Represents a web page or a significant section within a web application.
      * Permissions might control visibility or access to the entire page.
