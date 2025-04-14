@@ -67,6 +67,31 @@
 
 }
 ```
+for example:
+```json
+{
+  "name": "User Management PAGE",
+  "type": "URI",
+  "permission": [
+    {"code":  "P_USER_MANAGEMENT"}
+  ],
+  "adGroups": ["hk-admin", "sg-admin"]
+}
+```
+```json
+
+{
+  "name": "User Management uri",
+  "type": "URI",
+  "permission": [
+    {"code":  "B_USER_ALL", "method" :  "*", "uri":  "/users/*", "parentPage":  "P_USER_MANAGEMENT"}
+  ],
+  "adGroups": ["hk-admin", "sg-admin"]
+}
+
+```
+
+
 
 ## 4. Group default role Collection
 
@@ -122,7 +147,7 @@ eg:
 AD_Global_Approvers (根节点)
     -- AD_Regional_Approvers (第一级子节点)
         -- AD_Country_Approvers (第二级子节点)
-```json
+```
 [
   {
     "_id": "1",

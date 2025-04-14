@@ -1,6 +1,7 @@
 package com.kaishui.entitlement.repository;
 
 import com.kaishui.entitlement.entity.Resource;
+import org.reactivestreams.Publisher;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
@@ -17,4 +18,5 @@ public interface ResourceRepository extends ReactiveMongoRepository<Resource, St
     Flux<Resource> findByAdGroupsInAndIsActive(List<String> adGroups, boolean isActive);
     Flux<Resource> findByAdGroupsIn(List<String> adGroups);//add
 
+    Flux<Resource> findAllByIdInAndTypeAndIsActive(List<String> resourceIds, String uri, boolean isActive);
 }
