@@ -52,6 +52,7 @@ public class UserController {
     public Mono<ResponseEntity<User>> createUser(@Valid @RequestBody User user) { // Add @Valid
         return userService.insertOrUpdateUser(user)
                 .flatMap(userService::processFirstLogin) // Process first login
+                .map(userService::getRolesAndPermissions)
                 .map(createdUser -> ResponseEntity.status(HttpStatus.CREATED).body(createdUser))
                 .onErrorResume(DuplicateKeyException.class, e -> Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).build()));
     }
