@@ -58,7 +58,6 @@ public class RoleService {
                         role.setId(null); // Ensure ID is null for creation
                         role.setCreatedBy(createdByUsername);
                         role.setCreatedDate(new Date());
-                        role.setLastModifiedBy(null);
                         role.setLastModifiedDate(null);
                         role.setActive(true); // Ensure active on creation
                         // isApprover defaults from builder/entity

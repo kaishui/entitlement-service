@@ -1,0 +1,15 @@
+### Encrypt a value
+POST {{url}}/v1/api/crypto/encrypt
+Content-Type: application/json
+
+{
+  "value": "1234"
+}
+
+### Encrypt a value
+POST {{url}}/v1/api/crypto/decrypt
+Content-Type: application/json
+
+{
+  "value": "1234"
+}
