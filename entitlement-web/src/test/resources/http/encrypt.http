@@ -1,5 +1,5 @@
 ### Encrypt a value
-POST {{url}}/v1/api/crypto/encrypt
+POST {{url}}/api/crypto/encrypt
 Content-Type: application/json
 
 {
@@ -7,7 +7,7 @@ Content-Type: application/json
 }
 
 ### Encrypt a value
-POST {{url}}/v1/api/crypto/decrypt
+POST {{url}}/api/crypto/decrypt
 Content-Type: application/json
 
 {
