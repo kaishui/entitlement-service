@@ -146,8 +146,6 @@ public class ResourceService {
                 .filter(resource -> !CollectionUtils.isEmpty(resource.getPermission()))
                 // Get the list of permission documents from each resource
                 .map(Resource::getPermission)
-                // Flatten the Flux<List<Document>> into a Flux<Document>
-                .flatMap(Flux::fromIterable)
                 // Collect all unique documents into a Set
                 .collect(Collectors.toSet()) // collectList().map(HashSet::new) also works
                 .doOnSuccess(permissionSet -> log.info("Collected {} unique CONDITION permission documents for resource IDs: {}", permissionSet.size(), resourceIds))

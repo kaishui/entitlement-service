@@ -36,7 +36,7 @@ public class UriPermissionCheckerService implements PermissionCheckerInterface {
      * Checks if a user has permission for a given HTTP method and URI,
      * considering roles and AD group intersections for URI resources.
      *
-     * @param staffId   The staffId to check.
+     * @param staffId    The staffId to check.
      * @param httpMethod The HTTP method (e.g., "GET", "POST", "PUT", "DELETE", "*").
      * @param requestUri The requested URI path (e.g., "/users/123").
      * @return Mono<Boolean> emitting true if permission is granted, false otherwise.
@@ -118,29 +118,28 @@ public class UriPermissionCheckerService implements PermissionCheckerInterface {
             return false;
         }
 
-        for (Document permissionDoc : resource.getPermission()) {
-            // Safely extract method and uri patterns from the BSON Document
-            // Adjust keys ("method", "uri") based on your actual structure in the permission Document
-            String methodPattern = permissionDoc.getString(PermissionFieldConstant.METHOD);
-            String uriPattern = permissionDoc.getString(PermissionFieldConstant.URI);
+        Document permissionDoc = resource.getPermission();
+        // Safely extract method and uri patterns from the BSON Document
+        // Adjust keys ("method", "uri") based on your actual structure in the permission Document
+        String methodPattern = permissionDoc.getString(PermissionFieldConstant.METHOD);
+        String uriPattern = permissionDoc.getString(PermissionFieldConstant.URI);
 
-            // IMPORTANT: Only consider rules that actually define a method and URI for this check
-            if (methodPattern == null || uriPattern == null) {
-                log.trace("Skipping non-URI/method permission rule in resource '{}': {}", resource.getName(), permissionDoc.toJson());
-                continue; // Skip rules not defining method and uri (like {"code": "..."})
-            }
+        // IMPORTANT: Only consider rules that actually define a method and URI for this check
+        if (methodPattern == null || uriPattern == null) {
+            log.trace("Skipping non-URI/method permission rule in resource '{}': {}", resource.getName(), permissionDoc.toJson());
+            return false;
+        }
 
-            // 1. Check Method
-            boolean methodMatches = methodPattern.equals("*") || methodPattern.equalsIgnoreCase(httpMethod);
+        // 1. Check Method
+        boolean methodMatches = methodPattern.equals("*") || methodPattern.equalsIgnoreCase(httpMethod);
 
-            // 2. Check URI using AntPathMatcher
-            boolean uriMatches = pathMatcher.match(uriPattern, requestUri);
+        // 2. Check URI using AntPathMatcher
+        boolean uriMatches = pathMatcher.match(uriPattern, requestUri);
 
-            if (methodMatches && uriMatches) {
-                log.debug("Permission match found in resource '{}' (ID: {}): Rule='{}', Requested Method='{}', Requested URI='{}'",
-                        resource.getName(), resource.getId(), permissionDoc.toJson(), httpMethod, requestUri);
-                return true; // Found a matching rule
-            }
+        if (methodMatches && uriMatches) {
+            log.debug("Permission match found in resource '{}' (ID: {}): Rule='{}', Requested Method='{}', Requested URI='{}'",
+                    resource.getName(), resource.getId(), permissionDoc.toJson(), httpMethod, requestUri);
+            return true; // Found a matching rule
         }
 
         log.trace("No matching URI/method permission rule found in resource '{}' (ID: {}) for method '{}', uri '{}'",

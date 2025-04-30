@@ -1,8 +1,11 @@
 package com.kaishui.entitlement.web;
 
 import com.kaishui.entitlement.annotation.AuditLog;
+import com.kaishui.entitlement.entity.Role;
 import com.kaishui.entitlement.entity.User;
+import com.kaishui.entitlement.entity.dto.UserDto;
 import com.kaishui.entitlement.service.UserService;
+import com.kaishui.entitlement.util.AuthorizationUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -14,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,6 +29,7 @@ import reactor.core.publisher.Mono;
 public class UserController {
 
     private final UserService userService;
+    private final AuthorizationUtil authorizationUtil;
 
     @Operation(summary = "Get all users", responses = {
             @ApiResponse(responseCode = "200", description = "Successful operation", content = @Content(mediaType = "application/json", schema = @Schema(implementation = User.class)))
@@ -49,10 +54,10 @@ public class UserController {
             @ApiResponse(responseCode = "201", description = "User created", content = @Content(mediaType = "application/json", schema = @Schema(implementation = User.class)))
     })
     @PostMapping
-    public Mono<ResponseEntity<User>> createUser(@Valid @RequestBody User user) { // Add @Valid
+    public Mono<ResponseEntity<UserDto>> createUser(@Valid @RequestBody User user) { // Add @Valid
         return userService.insertOrUpdateUser(user)
                 .flatMap(userService::processFirstLogin) // Process first login
-                .map(userService::getRolesAndPermissions)
+                .flatMap(userService::getRolesAndPermissionsByUser)
                 .map(createdUser -> ResponseEntity.status(HttpStatus.CREATED).body(createdUser))
                 .onErrorResume(DuplicateKeyException.class, e -> Mono.just(ResponseEntity.status(HttpStatus.CONFLICT).build()));
     }
@@ -78,5 +83,16 @@ public class UserController {
     public Mono<ResponseEntity<Void>> deleteUser(@Parameter(description = "ID of the user to delete", required = true) @PathVariable String id) {
         return userService.deleteUser(id)
                 .then(Mono.just(ResponseEntity.noContent().<Void>build()));
+    }
+
+    @Operation(summary = "Find roles by user case ", responses = {
+            @ApiResponse(responseCode = "200", description = "Successful operation", content = @Content(mediaType = "application/json", schema = @Schema(implementation = Role.class))),
+            @ApiResponse(responseCode = "404", description = "User not found")
+    })
+    @GetMapping("/roles")
+    public Flux<Role> findRolesByUserCase(
+            @Parameter(description = "User Case", required = true) @RequestParam String userCase, ServerHttpRequest request) {
+        String staffId = authorizationUtil.getStaffIdFromToken(request);
+        return userService.findRolesByUserCase(userCase, staffId);
     }
 }

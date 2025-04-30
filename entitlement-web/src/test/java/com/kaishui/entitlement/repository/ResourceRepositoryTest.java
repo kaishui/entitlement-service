@@ -45,7 +45,7 @@ class ResourceRepositoryTest {
                 .name("Resource One")
                 .type("page")
                 .description("First Resource")
-                .permission(List.of(new Document("action", "read")))
+                .permission(new Document("action", "read"))
                 .adGroups(List.of("group-a", "group-b"))
                 .isActive(true)
                 .build();
@@ -55,7 +55,7 @@ class ResourceRepositoryTest {
                 .name("Resource Two")
                 .type("api")
                 .description("Second Resource")
-                .permission(List.of(new Document("method", "GET")))
+                .permission(new Document("method", "GET"))
                 .adGroups(List.of("group-b", "group-c"))
                 .isActive(true)
                 .build();
@@ -65,7 +65,7 @@ class ResourceRepositoryTest {
                 .name("Inactive Resource")
                 .type("page")
                 .description("This is inactive")
-                .permission(List.of(new Document("action", "none")))
+                .permission(new Document("action", "none"))
                 .adGroups(List.of("group-d"))
                 .isActive(false)
                 .build();

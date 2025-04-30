@@ -114,4 +114,14 @@ public class AuthorizationUtil {
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(encoded);
         return keyFactory.generatePublic(keySpec);
     }
+
+    /**
+     * todo: replace this with real implementation
+     * @param request
+     * @return
+     */
+    public String getStaffIdFromToken(ServerHttpRequest request){
+        String authHeader = request.getHeaders().getFirst(AUTHORIZATION_HEADER);
+        return "12345";
+    }
 }

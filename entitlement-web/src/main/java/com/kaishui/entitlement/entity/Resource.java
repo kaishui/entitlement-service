@@ -29,10 +29,11 @@ public class Resource {
     private String name; // e.g., "User Management Page", "Product Catalog"
 
     // Use List<Document> based on markdown definition
-    private List<Document> permission;
+    private Document permission;
 
     private String type; // e.g., "page", "button", "api", "condition"
     private String description;
+    private String userCase;
     private List<String> adGroups;
 
     @Builder.Default // Ensure default value is set by Lombok builder
@@ -45,7 +46,7 @@ public class Resource {
 
     @LastModifiedBy
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private String updatedBy; // Mapped to lastModifiedBy
+    private String lastModifiedBy; // Mapped to lastModifiedBy
 
     @CreatedDate
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
@@ -54,4 +55,6 @@ public class Resource {
     @LastModifiedDate
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private Date lastModifiedDate;
+
+
 }

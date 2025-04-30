@@ -58,7 +58,7 @@ class RoleServiceTest {
                 .type("global")
                 .description("Admin Role")
                 .isActive(true)
-                .createdBy("creator")
+                .createdBy("creator").userCase("ABC")
                 .createdDate(new Date())
                 .build();
 
@@ -84,11 +84,7 @@ class RoleServiceTest {
 
         // Mock the static method authorizationUtil.extractUsernameFromContext
         mockedAuthorizationUtil = Mockito.mockStatic(AuthorizationUtil.class);
-        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(Context.class)))
-                .thenReturn(testUsername);
-        // Also mock the ContextView variant if used internally by your actual util or tests
-        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
-                .thenReturn(testUsername);
+
     }
 
     @AfterEach
@@ -151,6 +147,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("createRole should succeed when role name is unique")
     void createRole_Success() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         Role newRole = Role.builder().roleName("NewRole").description("Desc").build();
         Role savedRole = Role.builder()
                 .id(new ObjectId().toHexString())
@@ -182,7 +181,7 @@ class RoleServiceTest {
                         r.getCreatedBy().equals(testUsername) &&
                         r.getCreatedDate() != null &&
                         r.isActive() &&
-                        r.getUpdatedBy() == null &&
+                        r.getLastModifiedBy() == null &&
                         r.getLastModifiedDate() == null)
                 .verifyComplete();
 
@@ -193,6 +192,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("createRole should fail when role name already exists")
     void createRole_NameConflict() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         Role newRole = Role.builder().roleName("Admin").description("Desc").build();
 
         when(roleRepository.existsByRoleName("Admin")).thenReturn(Mono.just(true));
@@ -214,6 +216,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("updateRole should succeed for active role with valid data")
     void updateRole_Success() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         Role updateData = Role.builder()
                 .roleName("AdminUpdated") // Change name
                 .description("Updated Desc")
@@ -249,7 +254,7 @@ class RoleServiceTest {
                                 updatedRole.getDescription().equals("Updated Desc") && // Desc updated
                                 updatedRole.getIsApprover().equals(true) && // Approver updated
                                 updatedRole.getResourceIds().equals(List.of("res1", "res2")) && // Resources updated
-                                updatedRole.getUpdatedBy().equals(testUsername) &&
+                                updatedRole.getLastModifiedBy().equals(testUsername) &&
                                 updatedRole.getLastModifiedDate() != null &&
                                 updatedRole.getCreatedBy().equals(activeRole1.getCreatedBy()) // CreatedBy unchanged
                 )
@@ -263,6 +268,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("updateRole should succeed when only non-name fields change")
     void updateRole_Success_NoNameChange() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         Role updateData = Role.builder()
                 .roleName("Admin") // Same name
                 .description("Updated Desc Only")
@@ -289,7 +297,7 @@ class RoleServiceTest {
         StepVerifier.create(result)
                 .expectNextMatches(updatedRole ->
                         updatedRole.getDescription().equals("Updated Desc Only") &&
-                                updatedRole.getUpdatedBy().equals(testUsername) &&
+                                updatedRole.getLastModifiedBy().equals(testUsername) &&
                                 updatedRole.getLastModifiedDate() != null
                 )
                 .verifyComplete();
@@ -303,6 +311,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("updateRole should fail when role not found")
     void updateRole_NotFound() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         Role updateData = Role.builder().description("Update").build();
         when(roleRepository.findById("nonexistent")).thenReturn(Mono.empty());
 
@@ -322,6 +333,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("updateRole should fail when role is inactive")
     void updateRole_Inactive() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         Role updateData = Role.builder().description("Update").build();
         when(roleRepository.findById(inactiveRoleId)).thenReturn(Mono.just(inactiveRole));
 
@@ -341,6 +355,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("updateRole should fail when new role name conflicts")
     void updateRole_NameConflict() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         Role updateData = Role.builder().roleName("User").description("Update").build(); // Try to use existing 'User' name
 
         // Make a copy to avoid modifying the original mock object state
@@ -373,6 +390,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("deleteRole should soft delete active role")
     void deleteRole_SuccessActive() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         // Make a copy to avoid modifying the original mock object state
         Role existingRoleCopy = Role.builder()
                 .id(activeRole1.getId())
@@ -396,7 +416,7 @@ class RoleServiceTest {
         verify(roleRepository).findById(roleId1);
         verify(roleRepository).save(argThat(role ->
                 !role.isActive() && // Check if inactive
-                        role.getUpdatedBy().equals(testUsername) &&
+                        role.getLastModifiedBy().equals(testUsername) &&
                         role.getLastModifiedDate() != null
         ));
     }
@@ -404,6 +424,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("deleteRole should do nothing for already inactive role")
     void deleteRole_AlreadyInactive() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         when(roleRepository.findById(inactiveRoleId)).thenReturn(Mono.just(inactiveRole)); // Return the inactive role
 
         Mono<Void> result = roleService.deleteRole(inactiveRoleId)
@@ -419,6 +442,9 @@ class RoleServiceTest {
     @Test
     @DisplayName("deleteRole should fail when role not found")
     void deleteRole_NotFound() {
+        // Also mock the ContextView variant if used internally by your actual util or tests
+        mockedAuthorizationUtil.when(() -> authorizationUtil.extractUsernameFromContext(any(reactor.util.context.ContextView.class)))
+                .thenReturn(testUsername);
         when(roleRepository.findById("nonexistent")).thenReturn(Mono.empty());
 
         Mono<Void> result = roleService.deleteRole("nonexistent")

@@ -14,7 +14,13 @@ management:
       exposure:
         include: "*" # Expose all endpoints
 
-
+ad:
+  group:
+    suffix:
+      admin: "ADMIN"
+      manager: "MANAGER"
+      user: "USER"
+    prefi: "AD_"
 jwt:
   public:
     key: ""

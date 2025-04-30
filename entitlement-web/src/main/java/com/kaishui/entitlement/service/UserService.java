@@ -4,7 +4,6 @@ import com.kaishui.entitlement.entity.GroupDefaultRole;
 import com.kaishui.entitlement.entity.Resource;
 import com.kaishui.entitlement.entity.Role;
 import com.kaishui.entitlement.entity.User;
-import com.kaishui.entitlement.entity.dto.ResourceDto;
 import com.kaishui.entitlement.entity.dto.UserDto;
 import com.kaishui.entitlement.entity.dto.UserResourceDto;
 import com.kaishui.entitlement.exception.CommonException;
@@ -13,6 +12,7 @@ import com.kaishui.entitlement.repository.GroupDefaultRoleRepository;
 import com.kaishui.entitlement.repository.ResourceRepository;
 import com.kaishui.entitlement.repository.RoleRepository;
 import com.kaishui.entitlement.repository.UserRepository;
+import com.kaishui.entitlement.util.AdGroupUtil;
 import com.kaishui.entitlement.util.AuthorizationUtil;
 import com.kaishui.entitlement.util.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +38,7 @@ public class UserService {
     private final ResourceRepository resourceRepository;
     private final AuthorizationUtil authorizationUtil;
     private final UserMapper userMapper;
+    private final AdGroupUtil adGroupUtil;
 
 
     private final GroupDefaultRoleRepository groupDefaultRoleRepository;
@@ -123,7 +124,7 @@ public class UserService {
 
         // If changes were made, update audit fields and save
         existingUser.setLastModifiedDate(new Date());
-        existingUser.setUpdatedBy(updatedByUsername); // Set the user who performed the update
+        existingUser.setLastModifiedBy(updatedByUsername); // Set the user who performed the update
     }
 
     /**
@@ -149,7 +150,7 @@ public class UserService {
                         }
                         // Set inactive and update audit fields
                         user.setActive(false);
-                        user.setUpdatedBy(deletedByUsername);
+                        user.setLastModifiedBy(deletedByUsername);
                         user.setLastModifiedDate(new Date());
                         log.info("Setting user with id: {} to inactive.", id);
                         // Save the updated user
@@ -201,7 +202,7 @@ public class UserService {
                             .jobTitle(user.getJobTitle())
                             .isActive(existingUser.isActive())
                             .createdBy(existingUser.getCreatedBy())
-                            .updatedBy(user.getUpdatedBy())
+                            .lastModifiedBy(user.getLastModifiedBy())
                             .createdDate(existingUser.getCreatedDate())
                             .lastModifiedDate(user.getLastModifiedDate())
                             .adGroups(user.getAdGroups())
@@ -216,78 +217,84 @@ public class UserService {
                 }));
     }
 
-    public Mono<UserDto> getUserWithRolesAndResources(String staffId) {
+    public Mono<UserDto> getRolesAndPermissions(String staffId) {
         return userRepository.findByStaffId(staffId)
                 .flatMap(user -> {
-                    // Get user's AD groups early
-                    List<String> userAdGroups = user.getAdGroups();
-                    if (CollectionUtils.isEmpty(userAdGroups)) {
-                        // Optimization: If user has no AD groups, they can't match any resource AD groups.
-                        // Return user with roles but empty resources immediately.
-                        log.debug("User '{}' has no AD groups, skipping resource fetch.", staffId);
-                        return roleRepository.findAllById(user.getRoleIds()).collectList()
-                                .map(roles -> {
-                                    UserDto userDto = userMapper.toDto(user);
-                                    userDto.setRoles(roles);
-                                    userDto.setResources(Collections.emptyList()); // No resources possible
-                                    return userDto;
-                                });
-                    }
-
-                    // 1. Fetch all active roles for the user
-                    Mono<List<Role>> rolesMono = roleRepository.findAllByIdAndIsActive(user.getRoleIds(), true)
-                            .collectList();
-
-                    // 2. Collect unique resource IDs and fetch *filtered* resources in one go
-                    Mono<List<Resource>> accessibleResourcesMono = rolesMono.flatMap(roles -> {
-                        List<String> uniqueResourceIds = roles.stream()
-                                .filter(role -> !CollectionUtils.isEmpty(role.getResourceIds()))
-                                .flatMap(role -> role.getResourceIds().stream())
-                                .distinct()
-                                .collect(Collectors.toList());
-
-                        if (uniqueResourceIds.isEmpty()) {
-                            log.debug("User '{}' roles have no associated resource IDs.", staffId);
-                            return Mono.just(Collections.<Resource>emptyList());
-                        }
-
-                        log.debug("Fetching accessible resources for user '{}' with IDs: {} and AD Groups: {}",
-                                staffId, uniqueResourceIds, userAdGroups);
-
-                        return resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(
-                                        uniqueResourceIds,
-                                        true,
-                                        userAdGroups
-                                )
-                                .collectList();
-                    });
-
-                    // 3. Zip roles and the *already filtered* resources
-                    return Mono.zip(rolesMono, accessibleResourcesMono)
-                            .map(tuple -> {
-                                UserDto userDto = userMapper.toDto(user); // Map user entity
-                                List<Role> roles = tuple.getT1();
-                                List<Resource> accessibleResources = tuple.getT2(); // These are already filtered by DB
-
-                                userDto.setRoles(roles); // Set the fetched roles
-
-                                // 4. Map the filtered Resource entities to UserResourceDto
-                                List<UserResourceDto> accessibleResourceDtos = accessibleResources.stream()
-                                        .map(this::mapToUserResourceDto) // Use your existing mapping helper
-                                        .collect(Collectors.toList());
-
-                                if (log.isDebugEnabled()) {
-                                    log.debug("User '{}' AD Groups: {}. Roles found: {}. Accessible Resources (from DB query): {}",
-                                            staffId, userAdGroups, roles.stream().map(Role::getId).collect(Collectors.toList()),
-                                            accessibleResourceDtos.stream().map(UserResourceDto::getId).collect(Collectors.toList()));
-                                }
-
-                                userDto.setResources(accessibleResourceDtos); // Set the filtered & mapped resources
-                                return userDto;
-                            });
+                    return getRolesAndPermissionsByUser(user);
                 })
                 .switchIfEmpty(Mono.error(new ResourceNotFoundException("User not found with staffId: " + staffId)))
                 .doOnError(e -> log.error("Error fetching user details for staffId {}: {}", staffId, e.getMessage(), e));
+    }
+
+    public Mono<UserDto> getRolesAndPermissionsByUser(User user) {
+        // Get user's AD groups early
+        List<String> userAdGroups = user.getAdGroups();
+        if (CollectionUtils.isEmpty(userAdGroups) || CollectionUtils.isEmpty(user.getRoleIds())) {
+            // Optimization: If user has no AD groups, they can't match any resource AD groups.
+            // Return user with roles but empty resources immediately.
+            log.debug("User '{}' has no AD groups / roles, skipping resource fetch.", user.getStaffId());
+            if (CollectionUtils.isEmpty(user.getRoleIds())) {
+                return Mono.just(userMapper.toDto(user));
+            }
+            return roleRepository.findAllById(user.getRoleIds()).collectList()
+                    .map(roles -> {
+                        UserDto userDto = userMapper.toDto(user);
+                        userDto.setRoles(roles);
+                        userDto.setResources(Collections.emptyList()); // No resources possible
+                        return userDto;
+                    });
+        }
+        // 1. Fetch all active roles for the user
+        Mono<List<Role>> rolesMono = roleRepository.findAllByIdAndIsActive(user.getRoleIds(), true)
+                .collectList();
+
+        // 2. Collect unique resource IDs and fetch *filtered* resources in one go
+        Mono<List<Resource>> accessibleResourcesMono = rolesMono.flatMap(roles -> {
+            List<String> uniqueResourceIds = roles.stream()
+                    .filter(role -> !CollectionUtils.isEmpty(role.getResourceIds()))
+                    .flatMap(role -> role.getResourceIds().stream())
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            if (uniqueResourceIds.isEmpty()) {
+                log.debug("User '{}' roles have no associated resource IDs.", user.getStaffId());
+                return Mono.just(Collections.<Resource>emptyList());
+            }
+
+            log.debug("Fetching accessible resources for user '{}' with IDs: {} and AD Groups: {}",
+                    user.getStaffId(), uniqueResourceIds, userAdGroups);
+
+            return resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(
+                            uniqueResourceIds,
+                            true,
+                            userAdGroups
+                    )
+                    .collectList();
+        });
+
+        // 3. Zip roles and the *already filtered* resources
+        return Mono.zip(rolesMono, accessibleResourcesMono)
+                .map(tuple -> {
+                    UserDto userDto = userMapper.toDto(user); // Map user entity
+                    List<Role> roles = tuple.getT1();
+                    List<Resource> accessibleResources = tuple.getT2(); // These are already filtered by DB
+
+                    userDto.setRoles(roles); // Set the fetched roles
+
+                    // 4. Map the filtered Resource entities to UserResourceDto
+                    List<UserResourceDto> accessibleResourceDtos = accessibleResources.stream()
+                            .map(this::mapToUserResourceDto) // Use your existing mapping helper
+                            .collect(Collectors.toList());
+
+                    if (log.isDebugEnabled()) {
+                        log.debug("User '{}' AD Groups: {}. Roles found: {}. Accessible Resources (from DB query): {}",
+                                user.getStaffId(), userAdGroups, roles.stream().map(Role::getId).collect(Collectors.toList()),
+                                accessibleResourceDtos.stream().map(UserResourceDto::getId).collect(Collectors.toList()));
+                    }
+
+                    userDto.setResources(accessibleResourceDtos); // Set the filtered & mapped resources
+                    return userDto;
+                });
     }
 
     private UserResourceDto mapToUserResourceDto(Resource resource) {
@@ -304,4 +311,25 @@ public class UserService {
     }
 
 
+    public Flux<Role> findRolesByUserCase(String userCase, String staffId) {
+        return userRepository.findByStaffId(staffId)
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("User not found for findRolesByUserCase with staffId: {}", staffId);
+                    return Mono.empty();
+                }))
+                .flatMapMany(user -> {
+                    List<String> roleIds = user.getRoleIds();
+                    log.info("staffId : {}, RoleIds: {}", staffId, roleIds);
+                    if (CollectionUtils.isEmpty(roleIds)) {
+                        return Flux.empty();
+                    }
+
+                    //1. if user has this userCase admin AD group, return all user case role
+                    if (adGroupUtil.isAdmin(user.getAdGroups(), userCase)) {
+                        log.info("User '{}' has admin AD group for userCase '{}', returning all user case roles", staffId, userCase);
+                        return roleRepository.findAllByUserCaseAndIsActive(userCase, true);
+                    }
+                    return roleRepository.findAllByIdsAndUserCaseAndIsActive(roleIds, userCase, true);
+                });
+    }
 }

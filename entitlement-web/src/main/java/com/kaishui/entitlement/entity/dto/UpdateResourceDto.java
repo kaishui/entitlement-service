@@ -21,8 +21,8 @@ public class UpdateResourceDto {
     private String name;
 
     @Schema(description = "Updated list of permission documents",
-            example = "[{\"method\": \"PUT\", \"uri\": \"/products/{id}\"}]")
-    private List<Document> permission; // Allow updating permission
+            example = "{\"method\": \"PUT\", \"uri\": \"/products/{id}\"}")
+    private Document permission; // Allow updating permission
 
     @Size(max = 50, message = "Resource type cannot exceed 50 characters")
     @Schema(description = "Updated type of the resource", example = "api")

@@ -21,8 +21,8 @@ public class ResourceDto {
     private String name;
 
     @Schema(description = "List of permission documents associated with the resource",
-            example = "[{\"method\": \"GET\", \"uri\": \"/users/*\"}, {\"page\": \"userAdmin\", \"action\": \"view\"}]")
-    private List<Document> permission;
+            example = "{\"method\": \"GET\", \"uri\": \"/users/*\"}, {\"page\": \"userAdmin\", \"action\": \"view\"}")
+    private Document permission;
 
     @Schema(description = "Type of the resource", example = "page")
     private String type;

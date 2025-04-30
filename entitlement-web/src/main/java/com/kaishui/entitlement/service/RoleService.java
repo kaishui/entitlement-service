@@ -58,7 +58,7 @@ public class RoleService {
                         role.setId(null); // Ensure ID is null for creation
                         role.setCreatedBy(createdByUsername);
                         role.setCreatedDate(new Date());
-                        role.setUpdatedBy(null);
+                        role.setLastModifiedBy(null);
                         role.setLastModifiedDate(null);
                         role.setActive(true); // Ensure active on creation
                         // isApprover defaults from builder/entity
@@ -126,7 +126,7 @@ public class RoleService {
         }
         // Do NOT update: id, createdBy, createdDate, isActive (handled by delete)
 
-        roleToUpdate.setUpdatedBy(updatedByUsername);
+        roleToUpdate.setLastModifiedBy(updatedByUsername);
         roleToUpdate.setLastModifiedDate(new Date());
     }
 
@@ -148,7 +148,7 @@ public class RoleService {
                         }
                         // ---> This line sets isActive to false <---
                         role.setActive(false);
-                        role.setUpdatedBy(deletedByUsername); // Mark who deactivated it
+                        role.setLastModifiedBy(deletedByUsername); // Mark who deactivated it
                         role.setLastModifiedDate(new Date());
                         log.info("Setting role with id: {} to inactive.", id);
                         // ---> This line saves the updated role (with isActive=false) <---
@@ -157,4 +157,6 @@ public class RoleService {
                     .then(); // Convert Mono<Role> to Mono<Void>
         });
     }
+
+
 }

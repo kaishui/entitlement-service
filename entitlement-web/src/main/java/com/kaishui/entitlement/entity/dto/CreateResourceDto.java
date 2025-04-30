@@ -21,8 +21,8 @@ public class CreateResourceDto {
 
     @NotNull(message = "Permission definition cannot be null")
     @Schema(description = "List of permission documents", requiredMode = Schema.RequiredMode.REQUIRED,
-            example = "[{\"method\": \"POST\", \"uri\": \"/products\"}]")
-    private List<Document> permission; // Use List<Document>
+            example = "{\"method\": \"POST\", \"uri\": \"/products\"}")
+    private Document permission; // Use List<Document>
 
     @NotBlank(message = "Resource type cannot be blank")
     @Size(max = 50, message = "Resource type cannot exceed 50 characters")

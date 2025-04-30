@@ -63,7 +63,7 @@ class ResourceControllerTest {
         resourceDto1.setName("Resource One");
         resourceDto1.setType("API");
         resourceDto1.setDescription("First API resource");
-        resourceDto1.setPermission(List.of(new Document("method", "GET")));
+        resourceDto1.setPermission(new Document("method", "GET"));
         resourceDto1.setAdGroups(List.of("group-a", "group-b"));
         resourceDto1.setIsActive(true);
         resourceDto1.setCreatedBy("creator");
@@ -74,7 +74,7 @@ class ResourceControllerTest {
         resourceDto2.setName("Resource Two UI");
         resourceDto2.setType("PAGE");
         resourceDto2.setDescription("Second UI resource");
-        resourceDto2.setPermission(List.of(new Document("component", "button")));
+        resourceDto2.setPermission(new Document("component", "button"));
         resourceDto2.setAdGroups(List.of("group-b", "group-c"));
         resourceDto2.setIsActive(true);
         resourceDto2.setCreatedBy("creator");
@@ -85,7 +85,7 @@ class ResourceControllerTest {
         createDto.setName("New Resource");
         createDto.setType("API");
         createDto.setDescription("A brand new resource");
-        createDto.setPermission(List.of(new Document("method", "POST")));
+        createDto.setPermission(new Document("method", "POST"));
         createDto.setAdGroups(List.of("group-new"));
         createDto.setIsActive(true);
 

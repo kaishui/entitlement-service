@@ -35,11 +35,13 @@ public class Role {
 
     private String description;
 
+    private String userCase;
+
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private String createdBy;
 
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private String updatedBy;
+    private String lastModifiedBy;
 
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private Date createdDate;
