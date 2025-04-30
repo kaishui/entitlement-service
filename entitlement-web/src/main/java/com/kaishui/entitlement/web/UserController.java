@@ -85,14 +85,27 @@ public class UserController {
                 .then(Mono.just(ResponseEntity.noContent().<Void>build()));
     }
 
-    @Operation(summary = "Find roles by user case ", responses = {
+    @Operation(summary = "Find current user roles by user case ", responses = {
             @ApiResponse(responseCode = "200", description = "Successful operation", content = @Content(mediaType = "application/json", schema = @Schema(implementation = Role.class))),
             @ApiResponse(responseCode = "404", description = "User not found")
     })
-    @GetMapping("/roles")
+    @GetMapping("/current/roles")
     public Flux<Role> findRolesByUserCase(
             @Parameter(description = "User Case", required = true) @RequestParam String userCase, ServerHttpRequest request) {
         String staffId = authorizationUtil.getStaffIdFromToken(request);
         return userService.findRolesByUserCase(userCase, staffId);
     }
+
+    @Operation(summary = "Find current user roles by user case ", responses = {
+            @ApiResponse(responseCode = "200", description = "Successful operation", content = @Content(mediaType = "application/json", schema = @Schema(implementation = Role.class))),
+            @ApiResponse(responseCode = "404", description = "User not found")
+    })
+    @GetMapping("/next/users")
+    public Flux<UserDto> getNextLevelUser(
+            @Parameter(description = "User Case", required = true) @RequestParam String userCase, ServerHttpRequest request) {
+        String staffId = authorizationUtil.getStaffIdFromToken(request);
+        return userService.getNextLevelUser(userCase, staffId);
+    }
+
+
 }

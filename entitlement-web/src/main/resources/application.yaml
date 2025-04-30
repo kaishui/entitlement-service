@@ -17,10 +17,10 @@ management:
 ad:
   group:
     suffix:
-      admin: "ADMIN"
-      manager: "MANAGER"
-      user: "USER"
-    prefi: "AD_"
+      admin: "-ADMIN"
+      manager: "-MANAGER"
+      user: "-USER"
+    prefi: "AD-"
 jwt:
   public:
     key: ""

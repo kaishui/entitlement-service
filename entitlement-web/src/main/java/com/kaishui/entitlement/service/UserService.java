@@ -20,12 +20,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -93,7 +93,7 @@ public class UserService {
                         log.warn("User not found for update with staffId: {}", user.getStaffId());
                         return Mono.error(new CommonException("User not found for update with staffId: " + user.getStaffId()));
                     }));
-        }); // End of deferContextual
+        });
     }
 
     private static void mergeUserInfo(User user, User existingUser, String updatedByUsername) {
@@ -330,6 +330,92 @@ public class UserService {
                         return roleRepository.findAllByUserCaseAndIsActive(userCase, true);
                     }
                     return roleRepository.findAllByIdsAndUserCaseAndIsActive(roleIds, userCase, true);
+                });
+    }
+
+    /**
+     * Finds users belonging to the 'next level' AD group relative to the requesting user,
+     * for a specific user case, and populates their DTOs with relevant roles for that case.
+     * Optimized to fetch roles in a single batch query.
+     * <p>
+     * 1. If requesting user is Admin -> find Managers
+     * 2. If requesting user is Manager -> find Users
+     * 3. If requesting user is User -> find Managers (e.g., for applying permissions upwards)
+     *
+     * @param userCase The specific user case context.
+     * @param staffId  The staff ID of the requesting user.
+     * @return Flux emitting UserDto objects for the found 'next level' users, populated with their roles for the given userCase.
+     */
+    public Flux<UserDto> getNextLevelUser(String userCase, String staffId) {
+        // 1. Find the requesting user
+        return userRepository.findByStaffId(staffId)
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("Requesting user not found for getNextLevelUser with staffId: {}", staffId);
+                    return Mono.empty(); // Return empty if requesting user not found
+                }))
+                .flatMap(requestingUser -> {
+                    // 2. Determine the target AD group
+                    String nextLevelADGroup = adGroupUtil.getNextLevelADGroup(userCase, requestingUser.getAdGroups());
+
+                    if (!StringUtils.hasText(nextLevelADGroup)) {
+                        log.warn("Could not determine next level AD group for userCase '{}' and requesting user '{}'. Returning empty.",
+                                userCase, staffId);
+                        return Mono.just(Collections.<User>emptyList()); // Return empty list if no target group
+                    }
+
+                    log.info("Requesting user '{}' triggers search for users in AD group '{}' for userCase '{}'",
+                            staffId, nextLevelADGroup, userCase);
+
+                    // 3. Find all active users belonging to the target AD group and collect them
+                    return userRepository.findByAdGroupAndIsActive(nextLevelADGroup, true).collectList();
+                })
+                .flatMapMany(targetUsers -> {
+                    if (targetUsers.isEmpty()) {
+                        return Flux.empty(); // No target users found
+                    }
+
+                    // 4. Extract all unique role IDs from the target users
+                    Set<String> uniqueRoleIds = targetUsers.stream()
+                            .filter(u -> !CollectionUtils.isEmpty(u.getRoleIds()))
+                            .flatMap(u -> u.getRoleIds().stream())
+                            .collect(Collectors.toSet());
+
+                    // If no roles associated with any target user, map directly to DTOs with empty roles
+                    if (uniqueRoleIds.isEmpty()) {
+                        return Flux.fromIterable(targetUsers)
+                                .map(user -> {
+                                    UserDto dto = userMapper.toDto(user);
+                                    dto.setRoles(Collections.emptyList());
+                                    return dto;
+                                });
+                    }
+
+                    // 5. Fetch all relevant roles for the userCase in a single query
+                    Mono<Map<String, Role>> rolesMapMono = roleRepository.findAllByIdsAndUserCaseAndIsActive(
+                                    List.copyOf(uniqueRoleIds), // Convert Set to List for repository method
+                                    userCase,
+                                    true
+                            )
+                            .collectMap(Role::getId, Function.identity()); // Create a Map<RoleId, Role>
+
+                    // 6. Combine users and the roles map, then map to DTOs
+                    return rolesMapMono.flatMapMany(rolesMap ->
+                            Flux.fromIterable(targetUsers)
+                                    .map(targetUser -> {
+                                        UserDto dto = userMapper.toDto(targetUser);
+                                        List<Role> userSpecificRoles = Collections.emptyList();
+
+                                        // Filter the fetched roles based on the current user's roleIds
+                                        if (!CollectionUtils.isEmpty(targetUser.getRoleIds())) {
+                                            userSpecificRoles = targetUser.getRoleIds().stream()
+                                                    .map(rolesMap::get) // Look up role in the map
+                                                    .filter(java.util.Objects::nonNull) // Filter out roles not found (e.g., inactive or wrong userCase)
+                                                    .collect(Collectors.toList());
+                                        }
+                                        dto.setRoles(userSpecificRoles);
+                                        return dto;
+                                    })
+                    );
                 });
     }
 }

@@ -36,7 +36,9 @@ DELETE {{url}}/api/users/67f4df4bd1dd833d80b70db7
 Accept: application/json
 
 ###
-
+### Get User role
+GET {{url}}/api/users/current/role?userCase=ABC
+Accept: application/json
 
 
 

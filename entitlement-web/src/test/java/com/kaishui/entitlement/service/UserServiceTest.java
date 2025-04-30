@@ -887,4 +887,6 @@ class UserServiceTest {
             verify(resourceRepository).findAllByIdInAndIsActiveAndAdGroupsIn(expectedResourceIds, true, user2AdGroups);
         }
     }
+
+
 }

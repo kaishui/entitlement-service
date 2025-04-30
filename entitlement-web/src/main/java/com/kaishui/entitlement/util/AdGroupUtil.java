@@ -64,4 +64,35 @@ public class AdGroupUtil {
         return adGroups.stream()
                 .anyMatch(expectedUserGroup::equalsIgnoreCase);
     }
+
+    public String getNextLevelADGroup(String userCase, boolean isAdmin, boolean isManager, boolean isUser) {
+        if (isAdmin) {
+            return adGroupPrefix + userCase + adGroupManagerSuffix;
+        } else if (isManager) {
+            return adGroupPrefix + userCase + adGroupUserSuffix;
+        } else if (isUser) {
+            return adGroupPrefix + userCase + adGroupUserSuffix;
+        }
+        return null;
+    }
+
+    /**
+     * Get the next level AD group based on the user's current role
+     * 1. If the user is an admin, return the manager group for grant permission
+     * 2. If the user is a manager, return the user group for grant permission
+     * 3. If the user is a user, return the manager group for applying permission
+     * @param userCase
+     * @param adGroups
+     * @return
+     */
+    public String getNextLevelADGroup(String userCase, List<String> adGroups) {
+        if (isAdmin(adGroups, userCase)) {
+            return adGroupPrefix + userCase + adGroupManagerSuffix;
+        } else if (isManager(adGroups, userCase)) {
+            return adGroupPrefix + userCase + adGroupUserSuffix;
+        } else if (isUser(adGroups, userCase)) {
+            return adGroupPrefix + userCase + adGroupManagerSuffix;
+        }
+        return null;
+    }
 }
