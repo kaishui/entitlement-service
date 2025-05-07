@@ -1,9 +1,6 @@
 package com.kaishui.entitlement.service;
 
-import com.kaishui.entitlement.entity.GroupDefaultRole;
-import com.kaishui.entitlement.entity.Resource;
-import com.kaishui.entitlement.entity.Role;
-import com.kaishui.entitlement.entity.User;
+import com.kaishui.entitlement.entity.*;
 import com.kaishui.entitlement.entity.dto.UserDto;
 import com.kaishui.entitlement.entity.dto.UserResourceDto;
 import com.kaishui.entitlement.exception.CommonException;
@@ -39,8 +36,6 @@ public class UserService {
     private final AuthorizationUtil authorizationUtil;
     private final UserMapper userMapper;
     private final AdGroupUtil adGroupUtil;
-
-
     private final GroupDefaultRoleRepository groupDefaultRoleRepository;
 
     public Flux<User> getAllUsers() {
@@ -53,14 +48,24 @@ public class UserService {
 
     @Transactional
     public Mono<User> createUser(User user) {
-        log.info("Creating user: {}", user);
-        return userRepository.save(user);
+        // Assuming 'user' comes with entitlements pre-populated if known
+        log.info("Creating user: {}", user.getStaffId());
+        user.setCreatedDate(new Date());
+        user.setActive(true);
+        user.setFirstLogin(true); // New users should go through first login process
+        // Consider setting createdBy from context if available
+        return Mono.deferContextual(contextView -> {
+            String createdByUsername = authorizationUtil.extractUsernameFromContext(contextView);
+            user.setCreatedBy(createdByUsername);
+            return userRepository.save(user); // Process first login for the newly saved user
+        });
     }
 
     /**
      * Updates an existing user's basic information based on staffId.
-     * Preserves fields like ID, creation details, roles, and first login status.
+     * Preserves fields like ID, creation details, entitlements, and first login status.
      * Sets the updatedBy and lastModifiedDate fields.
+     * Entitlements are NOT updated by this method; use insertOrUpdateUser or a dedicated method for that.
      *
      * @param user User object containing the updated information and the staffId to match.
      * @return Mono emitting the updated User or an error if not found or inactive.
@@ -72,235 +77,264 @@ public class UserService {
         }
         log.info("Attempting to update user with staffId: {}", user.getStaffId());
 
-        // Use deferContextual to get the username for the 'updatedBy' field
         return Mono.deferContextual(contextView -> {
             String updatedByUsername = authorizationUtil.extractUsernameFromContext(contextView);
 
             return userRepository.findByStaffId(user.getStaffId())
-                    .flatMap(existingUser -> { // Use flatMap for async operations
+                    .flatMap(existingUser -> {
                         if (!existingUser.isActive()) {
                             log.warn("Attempted to update inactive user with staffId: {}", user.getStaffId());
-                            // Return Mono.error instead of throwing directly
                             return Mono.error(new CommonException("Cannot update inactive user with staffId: " + user.getStaffId()));
                         }
-
+                        // mergeUserInfo only updates basic fields, not entitlements
                         mergeUserInfo(user, existingUser, updatedByUsername);
                         log.info("Saving updated user data for staffId: {}", existingUser.getStaffId());
-                        return userRepository.save(existingUser); // Save the modified existingUser
+                        return userRepository.save(existingUser);
                     })
-                    .switchIfEmpty(Mono.defer(() -> { // Use defer to create the error Mono lazily
-                        // Handle case where user with staffId is not found
+                    .switchIfEmpty(Mono.defer(() -> {
                         log.warn("User not found for update with staffId: {}", user.getStaffId());
                         return Mono.error(new CommonException("User not found for update with staffId: " + user.getStaffId()));
                     }));
         });
     }
 
-    private static void mergeUserInfo(User user, User existingUser, String updatedByUsername) {
-        // Update only the fields that should be updatable via this method
-        if (user.getUsername() != null && !user.getUsername().equals(existingUser.getUsername())) {
-            existingUser.setUsername(user.getUsername());
+    private static void mergeUserInfo(User sourceUser, User targetUser, String updatedByUsername) {
+        if (StringUtils.hasText(sourceUser.getUsername()) && !sourceUser.getUsername().equals(targetUser.getUsername())) {
+            targetUser.setUsername(sourceUser.getUsername());
         }
-        if (user.getEmail() != null && !user.getEmail().equals(existingUser.getEmail())) {
-            existingUser.setEmail(user.getEmail());
+        if (StringUtils.hasText(sourceUser.getEmail()) && !sourceUser.getEmail().equals(targetUser.getEmail())) {
+            targetUser.setEmail(sourceUser.getEmail());
         }
-        if (user.getDepartment() != null && !user.getDepartment().equals(existingUser.getDepartment())) {
-            existingUser.setDepartment(user.getDepartment());
+        if (StringUtils.hasText(sourceUser.getDepartment()) && !sourceUser.getDepartment().equals(targetUser.getDepartment())) {
+            targetUser.setDepartment(sourceUser.getDepartment());
         }
-        if (user.getFunctionalManager() != null && !user.getFunctionalManager().equals(existingUser.getFunctionalManager())) {
-            existingUser.setFunctionalManager(user.getFunctionalManager());
+        if (StringUtils.hasText(sourceUser.getFunctionalManager()) && !sourceUser.getFunctionalManager().equals(targetUser.getFunctionalManager())) {
+            targetUser.setFunctionalManager(sourceUser.getFunctionalManager());
         }
-        if (user.getEntityManager() != null && !user.getEntityManager().equals(existingUser.getEntityManager())) {
-            existingUser.setEntityManager(user.getEntityManager());
+        if (StringUtils.hasText(sourceUser.getEntityManager()) && !sourceUser.getEntityManager().equals(targetUser.getEntityManager())) {
+            targetUser.setEntityManager(sourceUser.getEntityManager());
         }
-        if (user.getJobTitle() != null && !user.getJobTitle().equals(existingUser.getJobTitle())) {
-            existingUser.setJobTitle(user.getJobTitle());
+        if (StringUtils.hasText(sourceUser.getJobTitle()) && !sourceUser.getJobTitle().equals(targetUser.getJobTitle())) {
+            targetUser.setJobTitle(sourceUser.getJobTitle());
         }
-        // Decide if adGroups should be updatable via this method
-//                         if (user.getAdGroups() != null && !user.getAdGroups().equals(existingUser.getAdGroups())) {
-//                            existingUser.setAdGroups(user.getAdGroups());
-//                            changed = true;
-//                         }
-
-        // If changes were made, update audit fields and save
-        existingUser.setLastModifiedDate(new Date());
-        existingUser.setLastModifiedBy(updatedByUsername); // Set the user who performed the update
+        // Note: Entitlements are not merged here.
+        targetUser.setLastModifiedDate(new Date());
+        targetUser.setLastModifiedBy(updatedByUsername);
     }
 
-    /**
-     * Deletes a user (soft delete by setting isActive=false).
-     *
-     * @param id The ID (String) of the user to delete.
-     * @return Mono<Void> indicating completion or error.
-     */
-    @Transactional // Optional: Usually not strictly needed for single-entity soft delete
+    @Transactional
     public Mono<Void> deleteUser(String id) {
         log.info("Attempting to soft delete user with id: {}", id);
-        // Use deferContextual to get the username for 'updatedBy'
         return Mono.deferContextual(contextView -> {
             String deletedByUsername = authorizationUtil.extractUsernameFromContext(contextView);
-
-            // Find the user by ID (assuming repository uses String ID)
             return userRepository.findById(id)
                     .flatMap(user -> {
-                        // Check if already inactive
                         if (!user.isActive()) {
                             log.info("User with id: {} is already inactive.", id);
-                            return Mono.empty(); // Nothing to do, complete successfully
+                            return Mono.empty();
                         }
-                        // Set inactive and update audit fields
                         user.setActive(false);
                         user.setLastModifiedBy(deletedByUsername);
                         user.setLastModifiedDate(new Date());
                         log.info("Setting user with id: {} to inactive.", id);
-                        // Save the updated user
                         return userRepository.save(user);
                     })
-                    // Handle case where user is not found
                     .switchIfEmpty(Mono.defer(() -> {
                         log.warn("User not found for deletion with id: {}", id);
                         return Mono.error(new CommonException("User not found for deletion with id: " + id));
                     }))
-                    // Ensure the final result is Mono<Void>
                     .then();
         });
     }
 
     public Mono<User> processFirstLogin(User user) {
-        if (!user.isFirstLogin()) {
-            return Mono.just(user); // Not first login, do nothing
+        if (!user.isFirstLogin() || CollectionUtils.isEmpty(user.getEntitlements())) {
+            if (user.isFirstLogin() && CollectionUtils.isEmpty(user.getEntitlements())) {
+                log.info("User {} is on first login but has no entitlements. Marking first login as false.", user.getStaffId());
+                user.setFirstLogin(false);
+                return userRepository.save(user);
+            }
+            return Mono.just(user);
         }
 
-        return groupDefaultRoleRepository.findByGroupNameIn(user.getAdGroups())
-                .map(GroupDefaultRole::getRoleIds)
-                .collectList()
-                .map(lists -> lists.stream().flatMap(List::stream).distinct().toList())
-                .flatMap(roleIds -> {
-                    user.setRoleIds(roleIds);
-                    user.setFirstLogin(false);
-                    return userRepository.save(user);
-                });
-    }
+        List<String> adGroupsFromUser = user.getEntitlements().stream()
+                .map(Entitlement::getAdGroup)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
 
-    @Transactional
-    public Mono<User> insertOrUpdateUser(User user) {
-        log.info("Inserting or updating user: {}", user);
-        return userRepository.findByStaffId(user.getStaffId())
-                .flatMap(existingUser -> {
-                    if (!existingUser.isActive()) {
-                        return Mono.error(new CommonException("Cannot update inactive user with staffId: " + user.getStaffId()));
+        if (CollectionUtils.isEmpty(adGroupsFromUser)) {
+            log.info("User {} has entitlements, but no AD groups found within them. Marking first login as false.", user.getStaffId());
+            user.setFirstLogin(false);
+            return userRepository.save(user);
+        }
+
+        return groupDefaultRoleRepository.findByGroupNameIn(adGroupsFromUser)
+                .collectMap(GroupDefaultRole::getGroupName, GroupDefaultRole::getRoleIds)
+                .flatMap(defaultRolesMap -> {
+                    boolean entitlementsChanged = false;
+                    for (Entitlement entitlement : user.getEntitlements()) {
+                        if (StringUtils.hasText(entitlement.getAdGroup())) {
+                            List<String> defaultRoleIdsForGroup = defaultRolesMap.get(entitlement.getAdGroup());
+                            if (!CollectionUtils.isEmpty(defaultRoleIdsForGroup)) {
+                                if (entitlement.getRoleIds() == null) {
+                                    entitlement.setRoleIds(new ArrayList<>());
+                                }
+                                // Add new default roles, ensuring uniqueness
+                                Set<String> currentRoleIds = new HashSet<>(entitlement.getRoleIds());
+                                if (currentRoleIds.addAll(defaultRoleIdsForGroup)) {
+                                    entitlementsChanged = true;
+                                }
+                                entitlement.setRoleIds(new ArrayList<>(currentRoleIds));
+                            }
+                        }
                     }
-                    // Update existing user's fields
-                    User updatedUser = User.builder()
-                            .id(existingUser.getId())
-                            .username(user.getUsername())
-                            .staffId(existingUser.getStaffId())
-                            .email(user.getEmail())
-                            .department(user.getDepartment())
-                            .functionalManager(user.getFunctionalManager())
-                            .entityManager(user.getEntityManager())
-                            .jobTitle(user.getJobTitle())
-                            .isActive(existingUser.isActive())
-                            .createdBy(existingUser.getCreatedBy())
-                            .lastModifiedBy(user.getLastModifiedBy())
-                            .createdDate(existingUser.getCreatedDate())
-                            .lastModifiedDate(user.getLastModifiedDate())
-                            .adGroups(user.getAdGroups())
-                            .roleIds(existingUser.getRoleIds())
-                            .isFirstLogin(existingUser.isFirstLogin())
-                            .build();
-                    return userRepository.save(updatedUser);
+                    user.setFirstLogin(false);
+                    if (entitlementsChanged) {
+                        log.info("Processed first login for user {}. Entitlements updated with default roles.", user.getStaffId());
+                    } else {
+                        log.info("Processed first login for user {}. No new default roles added to entitlements.", user.getStaffId());
+                    }
+                    return userRepository.save(user);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
-                    // Insert new user
+                    log.info("No default roles found for any AD groups of user {}. Marking first login as false.", user.getStaffId());
+                    user.setFirstLogin(false);
                     return userRepository.save(user);
                 }));
     }
 
+    @Transactional
+    public Mono<User> insertOrUpdateUser(User userFromRequest) {
+        log.info("Inserting or updating user with staffId: {}", userFromRequest.getStaffId());
+        if (!StringUtils.hasText(userFromRequest.getStaffId())) {
+            return Mono.error(new CommonException("StaffId cannot be null or blank for insert/update."));
+        }
+
+        return Mono.deferContextual(contextView -> {
+            String operatorUsername = authorizationUtil.extractUsernameFromContext(contextView);
+
+            return userRepository.findByStaffId(userFromRequest.getStaffId())
+                    .flatMap(existingUser -> { // User exists, update it
+                        if (!existingUser.isActive() && userFromRequest.isActive()) {
+                            // Logic for reactivating a user if needed
+                            log.info("Reactivating user with staffId: {}", existingUser.getStaffId());
+                            existingUser.setActive(true);
+                            // Potentially reset firstLogin if reactivation implies re-evaluation of roles
+                            // existingUser.setFirstLogin(true);
+                        } else if (!existingUser.isActive() && !userFromRequest.isActive()) {
+                            log.warn("Attempted to update inactive user via insertOrUpdate with staffId: {}. User remains inactive.", userFromRequest.getStaffId());
+                            // Optionally, still update other fields if allowed for inactive users
+                        }
+                        log.info("Updating existing user with staffId: {}", existingUser.getStaffId());
+
+                        existingUser.setUsername(userFromRequest.getUsername());
+                        existingUser.setEmail(userFromRequest.getEmail());
+                        existingUser.setDepartment(userFromRequest.getDepartment());
+                        existingUser.setFunctionalManager(userFromRequest.getFunctionalManager());
+                        existingUser.setEntityManager(userFromRequest.getEntityManager());
+                        existingUser.setJobTitle(userFromRequest.getJobTitle());
+                        existingUser.setEntitlements(userFromRequest.getEntitlements()); // Update entitlements
+                        existingUser.setActive(userFromRequest.isActive()); // Update active status
+
+                        existingUser.setLastModifiedDate(new Date());
+                        existingUser.setLastModifiedBy(operatorUsername);
+                        // If entitlements changed significantly, or user reactivated, consider if firstLogin needs reprocessing.
+                        // For now, we assume processFirstLogin is mainly for brand new users or explicit re-trigger.
+                        // If userFromRequest.isFirstLogin() is meaningful, use it:
+                        // existingUser.setFirstLogin(userFromRequest.isFirstLogin());
+
+                        return userRepository.save(existingUser);
+                    })
+                    .switchIfEmpty(Mono.defer(() -> { // User does not exist, insert new
+                        log.info("Inserting new user with staffId: {}", userFromRequest.getStaffId());
+                        userFromRequest.setCreatedDate(new Date());
+                        userFromRequest.setCreatedBy(operatorUsername);
+                        if (userFromRequest.getEntitlements() == null) { // Ensure entitlements list exists
+                            userFromRequest.setEntitlements(new ArrayList<>());
+                        }
+                        // isActive and isFirstLogin should be set on userFromRequest by caller or default to true
+                        // userFromRequest.setActive(true); // Default for new user
+                        // userFromRequest.setFirstLogin(true); // Default for new user
+
+                        return userRepository.save(userFromRequest)
+                                .flatMap(this::processFirstLogin);
+                    }));
+        });
+    }
+
     public Mono<UserDto> getRolesAndPermissions(String staffId) {
         return userRepository.findByStaffId(staffId)
-                .flatMap(user -> {
-                    return getRolesAndPermissionsByUser(user);
-                })
+                .flatMap(this::getRolesAndPermissionsByUser)
                 .switchIfEmpty(Mono.error(new ResourceNotFoundException("User not found with staffId: " + staffId)))
                 .doOnError(e -> log.error("Error fetching user details for staffId {}: {}", staffId, e.getMessage(), e));
     }
 
     public Mono<UserDto> getRolesAndPermissionsByUser(User user) {
-        // Get user's AD groups early
-        List<String> userAdGroups = user.getAdGroups();
-        if (CollectionUtils.isEmpty(userAdGroups) || CollectionUtils.isEmpty(user.getRoleIds())) {
-            // Optimization: If user has no AD groups, they can't match any resource AD groups.
-            // Return user with roles but empty resources immediately.
-            log.debug("User '{}' has no AD groups / roles, skipping resource fetch.", user.getStaffId());
-            if (CollectionUtils.isEmpty(user.getRoleIds())) {
-                return Mono.just(userMapper.toDto(user));
-            }
-            return roleRepository.findAllById(user.getRoleIds()).collectList()
-                    .map(roles -> {
-                        UserDto userDto = userMapper.toDto(user);
-                        userDto.setRoles(roles);
-                        userDto.setResources(Collections.emptyList()); // No resources possible
-                        return userDto;
-                    });
-        }
-        // 1. Fetch all active roles for the user
-        Mono<List<Role>> rolesMono = roleRepository.findAllByIdAndIsActive(user.getRoleIds(), true)
-                .collectList();
+        List<String> userAdGroups = Optional.ofNullable(user.getEntitlements()).orElse(Collections.emptyList()).stream()
+                .map(Entitlement::getAdGroup)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
 
-        // 2. Collect unique resource IDs and fetch *filtered* resources in one go
+        List<String> userRoleIds = Optional.ofNullable(user.getEntitlements()).orElse(Collections.emptyList()).stream()
+                .filter(e -> !CollectionUtils.isEmpty(e.getRoleIds()))
+                .flatMap(e -> e.getRoleIds().stream())
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+
+        UserDto userDto = userMapper.toDto(user);
+
+        if (CollectionUtils.isEmpty(userRoleIds)) {
+            userDto.setRoles(Collections.emptyList());
+            userDto.setResources(Collections.emptyList());
+            return Mono.just(userDto);
+        }
+
+        Mono<List<Role>> rolesMono = roleRepository.findAllByIdAndIsActive(userRoleIds, true)
+                .collectList()
+                .doOnNext(userDto::setRoles); // Set roles on DTO once fetched
+
+        // If no AD groups, resources dependent on AD group matching will be empty.
+        if (CollectionUtils.isEmpty(userAdGroups)) {
+            userDto.setResources(Collections.emptyList());
+            return rolesMono.thenReturn(userDto); // Return DTO after rolesMono completes
+        }
+
         Mono<List<Resource>> accessibleResourcesMono = rolesMono.flatMap(roles -> {
-            List<String> uniqueResourceIds = roles.stream()
+            // If rolesMono resulted in empty list (e.g. all userRoleIds were inactive)
+            if (CollectionUtils.isEmpty(roles)) {
+                return Mono.just(Collections.<Resource>emptyList());
+            }
+            List<String> uniqueResourceIdsFromRoles = roles.stream()
                     .filter(role -> !CollectionUtils.isEmpty(role.getResourceIds()))
                     .flatMap(role -> role.getResourceIds().stream())
                     .distinct()
                     .collect(Collectors.toList());
 
-            if (uniqueResourceIds.isEmpty()) {
-                log.debug("User '{}' roles have no associated resource IDs.", user.getStaffId());
+            if (uniqueResourceIdsFromRoles.isEmpty()) {
                 return Mono.just(Collections.<Resource>emptyList());
             }
-
-            log.debug("Fetching accessible resources for user '{}' with IDs: {} and AD Groups: {}",
-                    user.getStaffId(), uniqueResourceIds, userAdGroups);
-
             return resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(
-                            uniqueResourceIds,
-                            true,
-                            userAdGroups
-                    )
+                            uniqueResourceIdsFromRoles, true, userAdGroups)
                     .collectList();
         });
 
-        // 3. Zip roles and the *already filtered* resources
-        return Mono.zip(rolesMono, accessibleResourcesMono)
+        return Mono.zip(rolesMono, accessibleResourcesMono) // rolesMono is already setting roles on userDto via doOnNext
                 .map(tuple -> {
-                    UserDto userDto = userMapper.toDto(user); // Map user entity
-                    List<Role> roles = tuple.getT1();
-                    List<Resource> accessibleResources = tuple.getT2(); // These are already filtered by DB
-
-                    userDto.setRoles(roles); // Set the fetched roles
-
-                    // 4. Map the filtered Resource entities to UserResourceDto
+                    // List<Role> roles = tuple.getT1(); // Already set by doOnNext
+                    List<Resource> accessibleResources = tuple.getT2();
                     List<UserResourceDto> accessibleResourceDtos = accessibleResources.stream()
-                            .map(this::mapToUserResourceDto) // Use your existing mapping helper
+                            .map(this::mapToUserResourceDto)
                             .collect(Collectors.toList());
-
-                    if (log.isDebugEnabled()) {
-                        log.debug("User '{}' AD Groups: {}. Roles found: {}. Accessible Resources (from DB query): {}",
-                                user.getStaffId(), userAdGroups, roles.stream().map(Role::getId).collect(Collectors.toList()),
-                                accessibleResourceDtos.stream().map(UserResourceDto::getId).collect(Collectors.toList()));
-                    }
-
-                    userDto.setResources(accessibleResourceDtos); // Set the filtered & mapped resources
+                    userDto.setResources(accessibleResourceDtos);
                     return userDto;
                 });
     }
 
     private UserResourceDto mapToUserResourceDto(Resource resource) {
-        if (resource == null) {
-            return null;
-        }
+        if (resource == null) return null;
         UserResourceDto dto = new UserResourceDto();
         dto.setId(resource.getId());
         dto.setName(resource.getName());
@@ -310,7 +344,6 @@ public class UserService {
         return dto;
     }
 
-
     public Flux<Role> findRolesByUserCase(String userCase, String staffId) {
         return userRepository.findByStaffId(staffId)
                 .switchIfEmpty(Mono.defer(() -> {
@@ -318,103 +351,83 @@ public class UserService {
                     return Mono.empty();
                 }))
                 .flatMapMany(user -> {
-                    List<String> roleIds = user.getRoleIds();
-                    log.info("staffId : {}, RoleIds: {}", staffId, roleIds);
-                    if (CollectionUtils.isEmpty(roleIds)) {
+                    List<String> userRoleIds = Optional.ofNullable(user.getEntitlements()).orElse(Collections.emptyList()).stream()
+                            .filter(e -> !CollectionUtils.isEmpty(e.getRoleIds()))
+                            .flatMap(e -> e.getRoleIds().stream())
+                            .filter(StringUtils::hasText).distinct().collect(Collectors.toList());
+
+                    if (CollectionUtils.isEmpty(userRoleIds)) {
                         return Flux.empty();
                     }
 
-                    //1. if user has this userCase admin AD group, return all user case role
-                    if (adGroupUtil.isAdmin(user.getAdGroups(), userCase)) {
-                        log.info("User '{}' has admin AD group for userCase '{}', returning all user case roles", staffId, userCase);
+                    List<String> userAdGroups = Optional.ofNullable(user.getEntitlements()).orElse(Collections.emptyList()).stream()
+                            .map(Entitlement::getAdGroup)
+                            .filter(StringUtils::hasText).distinct().collect(Collectors.toList());
+
+                    if (adGroupUtil.isAdmin(userAdGroups, userCase)) {
+                        log.info("User '{}' is admin for userCase '{}', returning all active roles for this userCase", staffId, userCase);
                         return roleRepository.findAllByUserCaseAndIsActive(userCase, true);
                     }
-                    return roleRepository.findAllByIdsAndUserCaseAndIsActive(roleIds, userCase, true);
+                    return roleRepository.findAllByIdsAndUserCaseAndIsActive(userRoleIds, userCase, true);
                 });
     }
 
-    /**
-     * Finds users belonging to the 'next level' AD group relative to the requesting user,
-     * for a specific user case, and populates their DTOs with relevant roles for that case.
-     * Optimized to fetch roles in a single batch query.
-     * <p>
-     * 1. If requesting user is Admin -> find Managers
-     * 2. If requesting user is Manager -> find Users
-     * 3. If requesting user is User -> find Managers (e.g., for applying permissions upwards)
-     *
-     * @param userCase The specific user case context.
-     * @param staffId  The staff ID of the requesting user.
-     * @return Flux emitting UserDto objects for the found 'next level' users, populated with their roles for the given userCase.
-     */
     public Flux<UserDto> getNextLevelUser(String userCase, String staffId) {
-        // 1. Find the requesting user
         return userRepository.findByStaffId(staffId)
                 .switchIfEmpty(Mono.defer(() -> {
                     log.warn("Requesting user not found for getNextLevelUser with staffId: {}", staffId);
-                    return Mono.empty(); // Return empty if requesting user not found
+                    return Mono.<User>empty();
                 }))
                 .flatMap(requestingUser -> {
-                    // 2. Determine the target AD group
-                    String nextLevelADGroup = adGroupUtil.getNextLevelADGroup(userCase, requestingUser.getAdGroups());
+                    List<String> requestingUserAdGroups = Optional.ofNullable(requestingUser.getEntitlements()).orElse(Collections.emptyList()).stream()
+                            .map(Entitlement::getAdGroup)
+                            .filter(StringUtils::hasText).distinct().collect(Collectors.toList());
+
+                    String nextLevelADGroup = adGroupUtil.getNextLevelADGroup(userCase, requestingUserAdGroups);
 
                     if (!StringUtils.hasText(nextLevelADGroup)) {
-                        log.warn("Could not determine next level AD group for userCase '{}' and requesting user '{}'. Returning empty.",
-                                userCase, staffId);
-                        return Mono.just(Collections.<User>emptyList()); // Return empty list if no target group
+                        log.warn("Could not determine next level AD group for userCase '{}' and requesting user '{}'. Returning empty.", userCase, staffId);
+                        return Mono.just(Collections.<User>emptyList());
                     }
-
-                    log.info("Requesting user '{}' triggers search for users in AD group '{}' for userCase '{}'",
-                            staffId, nextLevelADGroup, userCase);
-
-                    // 3. Find all active users belonging to the target AD group and collect them
                     return userRepository.findByAdGroupAndIsActive(nextLevelADGroup, true).collectList();
                 })
                 .flatMapMany(targetUsers -> {
-                    if (targetUsers.isEmpty()) {
-                        return Flux.empty(); // No target users found
+                    if (targetUsers.isEmpty()) return Flux.empty();
+
+                    Set<String> allTargetUsersRoleIds = targetUsers.stream()
+                            .filter(u -> !CollectionUtils.isEmpty(u.getEntitlements()))
+                            .flatMap(u -> u.getEntitlements().stream())
+                            .filter(e -> !CollectionUtils.isEmpty(e.getRoleIds()))
+                            .flatMap(e -> e.getRoleIds().stream())
+                            .filter(StringUtils::hasText).collect(Collectors.toSet());
+
+                    if (allTargetUsersRoleIds.isEmpty()) {
+                        return Flux.fromIterable(targetUsers).map(targetUser -> {
+                            UserDto dto = userMapper.toDto(targetUser);
+                            dto.setRoles(Collections.emptyList());
+                            return dto;
+                        });
                     }
 
-                    // 4. Extract all unique role IDs from the target users
-                    Set<String> uniqueRoleIds = targetUsers.stream()
-                            .filter(u -> !CollectionUtils.isEmpty(u.getRoleIds()))
-                            .flatMap(u -> u.getRoleIds().stream())
-                            .collect(Collectors.toSet());
-
-                    // If no roles associated with any target user, map directly to DTOs with empty roles
-                    if (uniqueRoleIds.isEmpty()) {
-                        return Flux.fromIterable(targetUsers)
-                                .map(user -> {
-                                    UserDto dto = userMapper.toDto(user);
-                                    dto.setRoles(Collections.emptyList());
-                                    return dto;
-                                });
-                    }
-
-                    // 5. Fetch all relevant roles for the userCase in a single query
                     Mono<Map<String, Role>> rolesMapMono = roleRepository.findAllByIdsAndUserCaseAndIsActive(
-                                    List.copyOf(uniqueRoleIds), // Convert Set to List for repository method
-                                    userCase,
-                                    true
-                            )
-                            .collectMap(Role::getId, Function.identity()); // Create a Map<RoleId, Role>
+                                    List.copyOf(allTargetUsersRoleIds), userCase, true)
+                            .collectMap(Role::getId, Function.identity());
 
-                    // 6. Combine users and the roles map, then map to DTOs
                     return rolesMapMono.flatMapMany(rolesMap ->
-                            Flux.fromIterable(targetUsers)
-                                    .map(targetUser -> {
-                                        UserDto dto = userMapper.toDto(targetUser);
-                                        List<Role> userSpecificRoles = Collections.emptyList();
+                            Flux.fromIterable(targetUsers).map(targetUser -> {
+                                UserDto dto = userMapper.toDto(targetUser);
+                                List<String> currentTargetUserRoleIds = Optional.ofNullable(targetUser.getEntitlements()).orElse(Collections.emptyList()).stream()
+                                        .filter(e -> !CollectionUtils.isEmpty(e.getRoleIds()))
+                                        .flatMap(e -> e.getRoleIds().stream())
+                                        .filter(StringUtils::hasText).distinct().collect(Collectors.toList());
 
-                                        // Filter the fetched roles based on the current user's roleIds
-                                        if (!CollectionUtils.isEmpty(targetUser.getRoleIds())) {
-                                            userSpecificRoles = targetUser.getRoleIds().stream()
-                                                    .map(rolesMap::get) // Look up role in the map
-                                                    .filter(java.util.Objects::nonNull) // Filter out roles not found (e.g., inactive or wrong userCase)
-                                                    .collect(Collectors.toList());
-                                        }
-                                        dto.setRoles(userSpecificRoles);
-                                        return dto;
-                                    })
+                                List<Role> userSpecificRoles = currentTargetUserRoleIds.stream()
+                                        .map(rolesMap::get)
+                                        .filter(Objects::nonNull)
+                                        .collect(Collectors.toList());
+                                dto.setRoles(userSpecificRoles);
+                                return dto;
+                            })
                     );
                 });
     }

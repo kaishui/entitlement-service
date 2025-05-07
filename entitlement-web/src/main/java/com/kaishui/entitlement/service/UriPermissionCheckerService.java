@@ -3,8 +3,9 @@ package com.kaishui.entitlement.service;
 
 import com.kaishui.entitlement.constant.PermissionFieldConstant;
 import com.kaishui.entitlement.constant.ResourceType;
+import com.kaishui.entitlement.entity.Entitlement; // Import Entitlement
 import com.kaishui.entitlement.entity.Resource;
-import com.kaishui.entitlement.entity.User; // Assuming you have a User entity
+import com.kaishui.entitlement.entity.User;
 import com.kaishui.entitlement.repository.ResourceRepository;
 import com.kaishui.entitlement.repository.RoleRepository;
 import com.kaishui.entitlement.repository.UserRepository;
@@ -14,11 +15,15 @@ import org.bson.Document;
 import org.springframework.stereotype.Service;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils; // Import StringUtils
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects; // Import Objects
+import java.util.Optional; // Import Optional
+import java.util.stream.Collectors; // Import Collectors
 
 @Service
 @RequiredArgsConstructor
@@ -51,14 +56,33 @@ public class UriPermissionCheckerService implements PermissionCheckerInterface {
                     return Mono.empty(); // No user, no permission
                 }))
                 .flatMapMany(user -> { // Use flatMapMany to process roles and resources
-                    log.trace("User found: {}, Roles: {}, AD Groups: {}", user.getUsername(), user.getRoleIds(), user.getAdGroups());
-                    if (CollectionUtils.isEmpty(user.getRoleIds())) {
-                        log.debug("User '{}' has no roles assigned.", staffId);
+                    // Extract roleIds from entitlements
+                    List<String> userRoleIds = Optional.ofNullable(user.getEntitlements()).orElse(Collections.emptyList())
+                            .stream()
+                            .filter(e -> !CollectionUtils.isEmpty(e.getRoleIds()))
+                            .flatMap(e -> e.getRoleIds().stream())
+                            .filter(StringUtils::hasText)
+                            .distinct()
+                            .collect(Collectors.toList());
+
+                    // Extract adGroups from entitlements
+                    List<String> userAdGroups = Optional.ofNullable(user.getEntitlements()).orElse(Collections.emptyList())
+                            .stream()
+                            .map(Entitlement::getAdGroup)
+                            .filter(StringUtils::hasText)
+                            .distinct()
+                            .collect(Collectors.toList());
+
+                    log.trace("User found: {}, Role IDs from Entitlements: {}, AD Groups from Entitlements: {}",
+                            user.getUsername(), userRoleIds, userAdGroups);
+
+                    if (CollectionUtils.isEmpty(userRoleIds)) {
+                        log.debug("User '{}' has no roles assigned via entitlements.", staffId);
                         return Flux.empty(); // No roles, no permissions from roles
                     }
 
                     // Fetch roles associated with the user
-                    return roleRepository.findAllByIdAndIsActive(user.getRoleIds(), true)
+                    return roleRepository.findAllByIdAndIsActive(userRoleIds, true)
                             .flatMap(role -> {
                                 if (CollectionUtils.isEmpty(role.getResourceIds())) {
                                     return Flux.empty(); // No resources in this role
@@ -67,7 +91,7 @@ public class UriPermissionCheckerService implements PermissionCheckerInterface {
                                 return resourceRepository.findAllByIdInAndTypeAndIsActive(role.getResourceIds(), ResourceType.API.name(), true);
                             })
                             // Filter resources: Must have at least one AD Group matching the user's AD Groups
-                            .filter(resource -> checkAdGroupIntersection(user, resource));
+                            .filter(resource -> checkAdGroupIntersection(userAdGroups, resource)); // Pass extracted AD groups
                 })
                 // Now we have a Flux<Resource> containing only URI resources the user has access to
                 // via their roles AND matching AD groups.
@@ -80,9 +104,11 @@ public class UriPermissionCheckerService implements PermissionCheckerInterface {
 
     /**
      * Checks if there's an intersection between the user's AD groups and the resource's AD groups.
+     * @param userAdGroups The list of AD groups extracted from the user's entitlements.
+     * @param resource The resource to check.
      */
-    private boolean checkAdGroupIntersection(User user, Resource resource) {
-        List<String> userAdGroups = user.getAdGroups();
+    private boolean checkAdGroupIntersection(List<String> userAdGroups, Resource resource) {
+        // userAdGroups is now passed as a parameter
         List<String> resourceAdGroups = resource.getAdGroups();
 
         if (CollectionUtils.isEmpty(userAdGroups) || CollectionUtils.isEmpty(resourceAdGroups)) {
@@ -93,9 +119,6 @@ public class UriPermissionCheckerService implements PermissionCheckerInterface {
 
         // Efficient check for any common element
         boolean intersects = !Collections.disjoint(userAdGroups, resourceAdGroups);
-
-        // Alternative using streams (potentially less efficient for large lists):
-        // boolean intersects = userAdGroups.stream().anyMatch(resourceAdGroups::contains);
 
         if (intersects) {
             log.trace("AD Group check: Intersection found for resource '{}'. User groups: {}, Resource groups: {}",

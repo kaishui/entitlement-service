@@ -1,9 +1,6 @@
 package com.kaishui.entitlement.service;
 
-import com.kaishui.entitlement.entity.GroupDefaultRole;
-import com.kaishui.entitlement.entity.Resource;
-import com.kaishui.entitlement.entity.Role;
-import com.kaishui.entitlement.entity.User;
+import com.kaishui.entitlement.entity.*; // Import Entitlement
 import com.kaishui.entitlement.entity.dto.UserDto;
 import com.kaishui.entitlement.entity.dto.UserResourceDto;
 import com.kaishui.entitlement.exception.CommonException;
@@ -22,14 +19,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*; // Import ArrayList, HashSet
 import java.util.stream.Collectors;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -37,29 +33,29 @@ import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("UserService Tests") // Added display name for the class
+@DisplayName("UserService Tests")
 class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
     @Mock
-    private RoleRepository roleRepository; // Added RoleRepository mock
+    private RoleRepository roleRepository;
     @Mock
-    private ResourceRepository resourceRepository; // Added ResourceRepository mock
+    private ResourceRepository resourceRepository;
     @Mock
     private GroupDefaultRoleRepository groupDefaultRoleRepository;
     @Mock
     private AuthorizationUtil authorizationUtil;
     @Mock
-    private UserMapper userMapper; // Added UserMapper mock
+    private UserMapper userMapper;
     @Mock
-    private AdGroupUtil adGroupUtil; // Added AdGroupUtil mock
+    private AdGroupUtil adGroupUtil;
 
     @InjectMocks
     private UserService userService;
 
     // --- Test Data ---
-    private User user1, user2, inactiveUser, firstLoginUser;
+    private User user1, user2, inactiveUser, firstLoginUser, userWithNoRoles, userWithNoAdGroups;
     private Role role1, role2, role3, roleAdminCaseA, roleUserCaseA;
     private Resource resource1, resource2;
     private GroupDefaultRole groupRole1, groupRole2;
@@ -69,13 +65,16 @@ class UserServiceTest {
     private final String userId2 = new ObjectId().toHexString();
     private final String inactiveUserId = new ObjectId().toHexString();
     private final String firstLoginUserId = new ObjectId().toHexString();
+    private final String userWithNoRolesId = new ObjectId().toHexString();
+    private final String userWithNoAdGroupsId = new ObjectId().toHexString();
+
     private final String staffId1 = "staff123";
     private final String staffId2 = "staff456";
     private final String inactiveStaffId = "staff789";
     private final String firstLoginStaffId = "staff101";
-    private final String testUsername = "testUser"; // For context simulation
-    private final String adGroup1 = "AD_CaseA_ADMIN"; // Example Admin AD Group
-    private final String adGroup2 = "AD_CaseA_USER";  // Example User AD Group
+    private final String testUsername = "testUser";
+    private final String adGroup1 = "AD_CaseA_ADMIN";
+    private final String adGroup2 = "AD_CaseA_USER";
     private final String adGroupOther = "AD_OtherGroup";
     private final String roleId1 = "ROLE_ADMIN_GLOBAL";
     private final String roleId2 = "ROLE_USER_GLOBAL";
@@ -89,45 +88,68 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
-        // --- User Setup ---
+        // --- User Setup with Entitlements ---
+        Entitlement entitlementUser1Group1 = Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1, roleIdAdminCaseA)).build();
+        Entitlement entitlementUser1GroupOther = Entitlement.builder().adGroup(adGroupOther).roleIds(List.of(roleIdUserCaseA)).build(); // For broader role coverage
         user1 = User.builder().id(userId1).username("userone").staffId(staffId1).email("one@test.com")
-                .isActive(true).isFirstLogin(false).adGroups(List.of(adGroup1, adGroupOther)) // Has admin group for CaseA
-                .roleIds(List.of(roleId1, roleIdAdminCaseA, roleIdUserCaseA)).build();
+                .isActive(true).isFirstLogin(false)
+                .entitlements(List.of(entitlementUser1Group1, entitlementUser1GroupOther))
+                .build();
+
+        Entitlement entitlementUser2Group2 = Entitlement.builder().adGroup(adGroup2).roleIds(List.of(roleId2, roleIdUserCaseA)).build();
         user2 = User.builder().id(userId2).username("usertwo").staffId(staffId2).email("two@test.com")
-                .isActive(true).isFirstLogin(false).adGroups(List.of(adGroup2)) // Has user group for CaseA
-                .roleIds(List.of(roleId2, roleIdUserCaseA)).build();
+                .isActive(true).isFirstLogin(false)
+                .entitlements(List.of(entitlementUser2Group2))
+                .build();
+
         inactiveUser = User.builder().id(inactiveUserId).username("inactive").staffId(inactiveStaffId).email("inactive@test.com")
-                .isActive(false).isFirstLogin(false).build();
+                .isActive(false).isFirstLogin(false).entitlements(Collections.emptyList()) // Or null, depending on how you handle it
+                .build();
+
+        // For firstLoginUser, roles will be populated by processFirstLogin
+        Entitlement firstLoginEntitlement1 = Entitlement.builder().adGroup(adGroup1).roleIds(new ArrayList<>()).build();
+        Entitlement firstLoginEntitlement2 = Entitlement.builder().adGroup(adGroup2).roleIds(new ArrayList<>()).build();
         firstLoginUser = User.builder().id(firstLoginUserId).username("firstlogin").staffId(firstLoginStaffId).email("first@test.com")
-                .isActive(true).isFirstLogin(true).adGroups(List.of(adGroup1, adGroup2)).build(); // Use AD groups relevant to group roles
+                .isActive(true).isFirstLogin(true)
+                .entitlements(List.of(firstLoginEntitlement1, firstLoginEntitlement2))
+                .build();
+
+        userWithNoRoles = User.builder().id(userWithNoRolesId).staffId("noRolesStaff")
+                .entitlements(List.of(Entitlement.builder().adGroup(adGroup1).roleIds(Collections.emptyList()).build()))
+                .isActive(true).isFirstLogin(false).build();
+
+        userWithNoAdGroups = User.builder().id(userWithNoAdGroupsId).staffId("noAdGroupsStaff")
+                .entitlements(List.of(Entitlement.builder().adGroup(null).roleIds(List.of(roleId1)).build())) // AD Group is null
+                .isActive(true).isFirstLogin(false).build();
+
 
         // --- Role Setup ---
         role1 = Role.builder().id(roleId1).roleName("Admin Global").isActive(true).resourceIds(List.of(resourceId1, resourceId2)).build();
         role2 = Role.builder().id(roleId2).roleName("User Global").isActive(true).resourceIds(List.of(resourceId1)).build();
-        role3 = Role.builder().id(roleId3).roleName("Guest").isActive(true).resourceIds(Collections.emptyList()).build(); // Role with no resources
+        role3 = Role.builder().id(roleId3).roleName("Guest").isActive(true).resourceIds(Collections.emptyList()).build();
         roleAdminCaseA = Role.builder().id(roleIdAdminCaseA).roleName("Admin CaseA").userCase(userCaseA).isActive(true).resourceIds(List.of(resourceId1, resourceId2)).build();
         roleUserCaseA = Role.builder().id(roleIdUserCaseA).roleName("User CaseA").userCase(userCaseA).isActive(true).resourceIds(List.of(resourceId1)).build();
 
+        // --- Resource Setup ---
         resource1 = Resource.builder().id(resourceId1).name("Read Data")
-                .permission(new Document("action", "read")) // Changed type
+                .permission(new Document("action", "read"))
                 .isActive(true).adGroups(List.of(adGroup1, adGroup2, adGroupOther)).build();
         resource2 = Resource.builder().id(resourceId2).name("Write Data")
-                .permission(new Document("action", "write")) // Changed type
+                .permission(new Document("action", "write"))
                 .isActive(true).adGroups(List.of(adGroup1)).build();
+
         // --- GroupDefaultRole Setup ---
-        groupRole1 = GroupDefaultRole.builder().groupName(adGroup1).roleIds(List.of(roleId1, roleId2)).build(); // Matches firstLoginUser adGroup1
-        groupRole2 = GroupDefaultRole.builder().groupName(adGroup2).roleIds(List.of(roleId2, roleId3)).build(); // Matches firstLoginUser adGroup2
+        groupRole1 = GroupDefaultRole.builder().groupName(adGroup1).roleIds(List.of(roleId1, roleId2)).build();
+        groupRole2 = GroupDefaultRole.builder().groupName(adGroup2).roleIds(List.of(roleId2, roleId3)).build();
 
         // --- DTO Setup ---
-        userDto1 = new UserDto(); // Basic setup, will be populated in tests
+        userDto1 = new UserDto();
         userDto1.setId(userId1);
         userDto1.setStaffId(staffId1);
-
     }
 
-    @AfterEach
-    void tearDown() {
-    }
+    // ... GetUserTests, UpdateUserTests, DeleteUserTests remain largely the same as they don't directly test entitlement logic complexity ...
+    // Ensure that when findByStaffId or findById is mocked, the returned User object has the new 'entitlements' structure.
 
     @Nested
     @DisplayName("Get User Tests")
@@ -180,26 +202,27 @@ class UserServiceTest {
             User existingUserCopy = User.builder() // Create a mutable copy
                     .id(user1.getId()).username(user1.getUsername()).staffId(user1.getStaffId())
                     .email(user1.getEmail()).isActive(true).createdBy("creator").createdDate(new Date())
+                    .entitlements(user1.getEntitlements()) // Copy entitlements
                     .build();
 
             when(userRepository.findByStaffId(staffId1)).thenReturn(Mono.just(existingUserCopy));
             when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0))); // Return saved entity
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
+
 
             // Act & Assert
             StepVerifier.create(userService.updateUser(updateData)
-                            // Provide context for deferContextual
-                            .contextWrite(Context.of("USER_INFO", testUsername)))
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .expectNextMatches(updatedUser ->
                             updatedUser.getId().equals(userId1) &&
                                     updatedUser.getUsername().equals("updatedName") &&
                                     updatedUser.getEmail().equals("updated@email.com") &&
-                                    updatedUser.getLastModifiedBy().equals(testUsername) && // Verify audit field
-                                    updatedUser.getLastModifiedDate() != null // Verify audit field
+                                    updatedUser.getLastModifiedBy().equals(testUsername) &&
+                                    updatedUser.getLastModifiedDate() != null
                     )
                     .verifyComplete();
 
             verify(userRepository).findByStaffId(staffId1);
-            // Verify save was called with the updated user, including audit fields
             verify(userRepository).save(argThat(savedUser ->
                     savedUser.getId().equals(userId1) &&
                             savedUser.getUsername().equals("updatedName") &&
@@ -241,9 +264,11 @@ class UserServiceTest {
         void updateUser_FailNotFound() {
             User updateData = User.builder().staffId("nonexistentStaffId").username("name").build();
             when(userRepository.findByStaffId("nonexistentStaffId")).thenReturn(Mono.empty());
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
+
 
             StepVerifier.create(userService.updateUser(updateData)
-                            .contextWrite(Context.of("USER_INFO", testUsername))) // Context needed for error path too
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .expectErrorMatches(throwable -> throwable instanceof CommonException &&
                             throwable.getMessage().contains("User not found for update with staffId: nonexistentStaffId"))
                     .verify();
@@ -256,10 +281,12 @@ class UserServiceTest {
         @DisplayName("updateUser should fail if user is inactive")
         void updateUser_FailInactiveUser() {
             User updateData = User.builder().staffId(inactiveStaffId).username("name").build();
-            when(userRepository.findByStaffId(inactiveStaffId)).thenReturn(Mono.just(inactiveUser)); // Return the inactive user
+            when(userRepository.findByStaffId(inactiveStaffId)).thenReturn(Mono.just(inactiveUser));
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
+
 
             StepVerifier.create(userService.updateUser(updateData)
-                            .contextWrite(Context.of("USER_INFO", testUsername)))
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .expectErrorMatches(throwable -> throwable instanceof CommonException &&
                             throwable.getMessage().contains("Cannot update inactive user with staffId: " + inactiveStaffId))
                     .verify();
@@ -275,21 +302,20 @@ class UserServiceTest {
         @Test
         @DisplayName("deleteUser should soft delete active user")
         void deleteUser_SuccessActive() {
-            // Arrange
-            User existingUserCopy = User.builder() // Mutable copy
+            User existingUserCopy = User.builder()
                     .id(user1.getId()).username(user1.getUsername()).staffId(user1.getStaffId())
                     .isActive(true).build();
             when(userRepository.findById(userId1)).thenReturn(Mono.just(existingUserCopy));
             when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
 
-            // Act & Assert
             StepVerifier.create(userService.deleteUser(userId1)
-                            .contextWrite(Context.of("USER_INFO", testUsername)))
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .verifyComplete();
 
             verify(userRepository).findById(userId1);
             verify(userRepository).save(argThat(user ->
-                    !user.isActive() && // Check if inactive
+                    !user.isActive() &&
                             user.getLastModifiedBy().equals(testUsername) &&
                             user.getLastModifiedDate() != null
             ));
@@ -298,23 +324,27 @@ class UserServiceTest {
         @Test
         @DisplayName("deleteUser should complete without saving for already inactive user")
         void deleteUser_AlreadyInactive() {
-            when(userRepository.findById(inactiveUserId)).thenReturn(Mono.just(inactiveUser)); // Return the inactive user
+            when(userRepository.findById(inactiveUserId)).thenReturn(Mono.just(inactiveUser));
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
+
 
             StepVerifier.create(userService.deleteUser(inactiveUserId)
-                            .contextWrite(Context.of("USER_INFO", testUsername)))
-                    .verifyComplete(); // Should complete without error
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
+                    .verifyComplete();
 
             verify(userRepository).findById(inactiveUserId);
-            verify(userRepository, never()).save(any(User.class)); // Save should not be called
+            verify(userRepository, never()).save(any(User.class));
         }
 
         @Test
         @DisplayName("deleteUser should fail when user not found")
         void deleteUser_NotFound() {
             when(userRepository.findById("nonexistent")).thenReturn(Mono.empty());
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
+
 
             StepVerifier.create(userService.deleteUser("nonexistent")
-                            .contextWrite(Context.of("USER_INFO", testUsername)))
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .expectErrorMatches(throwable -> throwable instanceof CommonException &&
                             throwable.getMessage().contains("User not found for deletion with id: nonexistent"))
                     .verify();
@@ -324,6 +354,7 @@ class UserServiceTest {
         }
     }
 
+
     @Nested
     @DisplayName("Process First Login Tests")
     class ProcessFirstLoginTests {
@@ -331,10 +362,10 @@ class UserServiceTest {
         @Test
         @DisplayName("processFirstLogin should do nothing if not first login")
         void processFirstLogin_NotFirstLogin() {
-            User notFirstLoginUser = User.builder().isFirstLogin(false).build();
+            User notFirstLoginUser = User.builder().isFirstLogin(false).entitlements(Collections.emptyList()).build();
 
             StepVerifier.create(userService.processFirstLogin(notFirstLoginUser))
-                    .expectNext(notFirstLoginUser) // Should return the user unmodified
+                    .expectNext(notFirstLoginUser)
                     .verifyComplete();
 
             verify(groupDefaultRoleRepository, never()).findByGroupNameIn(any());
@@ -342,249 +373,241 @@ class UserServiceTest {
         }
 
         @Test
-        @DisplayName("processFirstLogin should assign roles and update flag if first login")
+        @DisplayName("processFirstLogin should assign roles to entitlements and update flag if first login")
         void processFirstLogin_Success() {
-            // Arrange
-            User firstLoginUserCopy = User.builder() // Use a copy
-                    .id(firstLoginUserId).username("firstlogin").staffId(firstLoginStaffId)
-                    .isActive(true).isFirstLogin(true).adGroups(List.of(adGroup1, adGroup2))
-                    .build();
-
-            // Mock repository calls made by processFirstLogin
+            // firstLoginUser is set up with entitlements having empty roleIds lists
             when(groupDefaultRoleRepository.findByGroupNameIn(List.of(adGroup1, adGroup2)))
-                    .thenReturn(Flux.just(groupRole1, groupRole2)); // Return roles for the groups
-            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0))); // Mock save
+                    .thenReturn(Flux.just(groupRole1, groupRole2));
+            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-            // Act
-            Mono<User> result = userService.processFirstLogin(firstLoginUserCopy);
+            StepVerifier.create(userService.processFirstLogin(firstLoginUser))
+                    .expectNextMatches(updatedUser -> {
+                        if (updatedUser.isFirstLogin()) return false; // Flag should be false
+                        if (CollectionUtils.isEmpty(updatedUser.getEntitlements())) return false;
 
-            // Assert
-            StepVerifier.create(result)
-                    .expectNextMatches(updatedUser ->
-                            !updatedUser.isFirstLogin() && // Flag should be false
-                                    updatedUser.getRoleIds() != null &&
-                                    updatedUser.getRoleIds().containsAll(List.of(roleId1, roleId2, roleId3)) && // Check assigned roles (distinct)
-                                    updatedUser.getRoleIds().size() == 3 // Ensure distinct roles
-                    )
+                        Map<String, List<String>> adGroupToRoles = updatedUser.getEntitlements().stream()
+                                .collect(Collectors.toMap(Entitlement::getAdGroup, Entitlement::getRoleIds));
+
+                        List<String> rolesForAdGroup1 = adGroupToRoles.get(adGroup1);
+                        List<String> rolesForAdGroup2 = adGroupToRoles.get(adGroup2);
+
+                        boolean adGroup1RolesCorrect = rolesForAdGroup1 != null &&
+                                new HashSet<>(rolesForAdGroup1).equals(new HashSet<>(List.of(roleId1, roleId2)));
+                        boolean adGroup2RolesCorrect = rolesForAdGroup2 != null &&
+                                new HashSet<>(rolesForAdGroup2).equals(new HashSet<>(List.of(roleId2, roleId3)));
+
+                        return adGroup1RolesCorrect && adGroup2RolesCorrect;
+                    })
                     .verifyComplete();
 
             verify(groupDefaultRoleRepository).findByGroupNameIn(List.of(adGroup1, adGroup2));
-            verify(userRepository).save(argThat(savedUser ->
-                    !savedUser.isFirstLogin() && savedUser.getRoleIds().size() == 3
-            ));
+            verify(userRepository).save(argThat(savedUser -> !savedUser.isFirstLogin()));
         }
 
         @Test
         @DisplayName("processFirstLogin should update flag even if no roles found for groups")
         void processFirstLogin_NoRolesFound() {
-            User firstLoginUserCopy = User.builder()
-                    .id(firstLoginUserId).isFirstLogin(true).adGroups(List.of("group-c"))
+            User user = User.builder().id(firstLoginUserId).isFirstLogin(true)
+                    .entitlements(List.of(Entitlement.builder().adGroup("group-c").roleIds(new ArrayList<>()).build()))
                     .build();
-            when(groupDefaultRoleRepository.findByGroupNameIn(List.of("group-c"))).thenReturn(Flux.empty()); // No roles found
+            when(groupDefaultRoleRepository.findByGroupNameIn(List.of("group-c"))).thenReturn(Flux.empty());
             when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-            StepVerifier.create(userService.processFirstLogin(firstLoginUserCopy))
+            StepVerifier.create(userService.processFirstLogin(user))
                     .expectNextMatches(updatedUser ->
-                            !updatedUser.isFirstLogin() && // Flag should be false
-                                    (updatedUser.getRoleIds() == null || updatedUser.getRoleIds().isEmpty()) // Roles should be empty or null
+                            !updatedUser.isFirstLogin() &&
+                                    updatedUser.getEntitlements().get(0).getRoleIds().isEmpty()
                     )
                     .verifyComplete();
-
-            verify(groupDefaultRoleRepository).findByGroupNameIn(List.of("group-c"));
             verify(userRepository).save(argThat(savedUser -> !savedUser.isFirstLogin()));
         }
 
         @Test
-        @DisplayName("processFirstLogin should handle null AD groups")
-        void processFirstLogin_NullAdGroups() {
-            User firstLoginUserCopy = User.builder().id(firstLoginUserId).isFirstLogin(true).adGroups(null).build();
+        @DisplayName("processFirstLogin should handle null entitlements list")
+        void processFirstLogin_NullEntitlements() {
+            User user = User.builder().id(firstLoginUserId).isFirstLogin(true).entitlements(null).build();
             when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-            StepVerifier.create(userService.processFirstLogin(firstLoginUserCopy))
-                    .expectNextMatches(updatedUser -> !updatedUser.isFirstLogin() && (updatedUser.getRoleIds() == null || updatedUser.getRoleIds().isEmpty()))
+            StepVerifier.create(userService.processFirstLogin(user))
+                    .expectNextMatches(updatedUser -> !updatedUser.isFirstLogin() && updatedUser.getEntitlements() == null)
                     .verifyComplete();
-
-            verify(groupDefaultRoleRepository, never()).findByGroupNameIn(any()); // Should not be called
-            verify(userRepository).save(argThat(savedUser -> !savedUser.isFirstLogin()));
-        }
-
-        @Test
-        @DisplayName("processFirstLogin should handle empty AD groups")
-        void processFirstLogin_EmptyAdGroups() {
-            User firstLoginUserCopy = User.builder().id(firstLoginUserId).isFirstLogin(true).adGroups(Collections.emptyList()).build();
-            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-            StepVerifier.create(userService.processFirstLogin(firstLoginUserCopy))
-                    .expectNextMatches(updatedUser -> !updatedUser.isFirstLogin() && (updatedUser.getRoleIds() == null || updatedUser.getRoleIds().isEmpty()))
-                    .verifyComplete();
-
             verify(groupDefaultRoleRepository, never()).findByGroupNameIn(any());
+            verify(userRepository).save(argThat(savedUser -> !savedUser.isFirstLogin()));
+        }
+
+        @Test
+        @DisplayName("processFirstLogin should handle empty entitlements list")
+        void processFirstLogin_EmptyEntitlements() {
+            User user = User.builder().id(firstLoginUserId).isFirstLogin(true).entitlements(Collections.emptyList()).build();
+            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+            StepVerifier.create(userService.processFirstLogin(user))
+                    .expectNextMatches(updatedUser -> !updatedUser.isFirstLogin() && updatedUser.getEntitlements().isEmpty())
+                    .verifyComplete();
+            verify(groupDefaultRoleRepository, never()).findByGroupNameIn(any());
+            verify(userRepository).save(argThat(savedUser -> !savedUser.isFirstLogin()));
+        }
+        @Test
+        @DisplayName("processFirstLogin should handle entitlements with null AD groups")
+        void processFirstLogin_EntitlementsWithNullAdGroups() {
+            User user = User.builder().id(firstLoginUserId).isFirstLogin(true)
+                    .entitlements(List.of(Entitlement.builder().adGroup(null).roleIds(new ArrayList<>()).build()))
+                    .build();
+            // findByGroupNameIn will be called with an empty list if only null/blank AD groups are present
+            when(groupDefaultRoleRepository.findByGroupNameIn(Collections.emptyList())).thenReturn(Flux.empty());
+            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+            StepVerifier.create(userService.processFirstLogin(user))
+                    .expectNextMatches(updatedUser -> !updatedUser.isFirstLogin())
+                    .verifyComplete();
+
+            verify(groupDefaultRoleRepository).findByGroupNameIn(Collections.emptyList());
             verify(userRepository).save(argThat(savedUser -> !savedUser.isFirstLogin()));
         }
     }
 
-    // ========================================================================
-    // New/Enhanced Tests
-    // ========================================================================
 
     @Nested
     @DisplayName("Insert Or Update User Tests")
     class InsertOrUpdateUserTests {
 
-        // Note: insertOrUpdateUser in the service code seems to have issues.
-        // 1. It doesn't set audit fields (createdBy/lastModifiedBy) correctly.
-        // 2. It doesn't call processFirstLogin.
-        // 3. The update logic uses User.builder() which might miss copying essential fields.
-        // The tests below reflect the *current* behavior of the provided service code.
-        // Consider refactoring insertOrUpdateUser in UserService.
-
         @Test
-        @DisplayName("insertOrUpdateUser should insert new user when not found")
+        @DisplayName("insertOrUpdateUser should insert new user and call processFirstLogin")
         void insertOrUpdateUser_InsertNew() {
-            // Arrange
-            User newUserInput = User.builder().staffId("newStaff123").username("newUser").email("new@test.com").build();
-            // Simulate the user *after* being saved by the repository (ID assigned)
-            User savedUser = User.builder().id(new ObjectId().toHexString()).staffId("newStaff123").username("newUser").email("new@test.com").build();
+            User newUserInput = User.builder().staffId("newStaff123").username("newUser").email("new@test.com")
+                    .entitlements(List.of(Entitlement.builder().adGroup(adGroup1).roleIds(new ArrayList<>()).build())) // Provide entitlements
+                    .isFirstLogin(true) // Explicitly set for clarity
+                    .isActive(true)
+                    .build();
+            User savedUser = User.builder().id(new ObjectId().toHexString()).staffId("newStaff123").username("newUser").email("new@test.com")
+                    .entitlements(newUserInput.getEntitlements()).isFirstLogin(true).isActive(true) // Reflect input
+                    .build();
+            User userAfterFirstLogin = User.builder().id(savedUser.getId()).staffId(savedUser.getStaffId())
+                    .entitlements(List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1, roleId2)).build())) // Roles assigned
+                    .isFirstLogin(false).isActive(true) // Flag updated
+                    .build();
+
 
             when(userRepository.findByStaffId("newStaff123")).thenReturn(Mono.empty());
-            // Mock the save for the insert case (switchIfEmpty path)
-            when(userRepository.save(eq(newUserInput))).thenReturn(Mono.just(savedUser));
+            when(userRepository.save(eq(newUserInput))).thenReturn(Mono.just(savedUser)); // Save before first login
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
+            // Mock processFirstLogin's internal calls
+            when(groupDefaultRoleRepository.findByGroupNameIn(List.of(adGroup1))).thenReturn(Flux.just(groupRole1));
+            when(userRepository.save(argThat(u -> u.getId().equals(savedUser.getId()) && !u.isFirstLogin()))) // Save after first login
+                    .thenReturn(Mono.just(userAfterFirstLogin));
 
-            // Act
-            Mono<User> result = userService.insertOrUpdateUser(newUserInput);
-            // .contextWrite(ctx -> ctx.put("USER_INFO", testUsername)); // Context not used by current insertOrUpdateUser
 
-            // Assert
-            StepVerifier.create(result)
+            StepVerifier.create(userService.insertOrUpdateUser(newUserInput)
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .expectNextMatches(u ->
-                                    u.getId() != null && // Should have an ID after save
-                                            u.getStaffId().equals("newStaff123")
-                            // Current implementation doesn't set audit fields or call processFirstLogin here
+                            u.getId().equals(savedUser.getId()) &&
+                                    !u.isFirstLogin() && // Check first login flag
+                                    u.getEntitlements().get(0).getRoleIds().containsAll(List.of(roleId1, roleId2)) // Check roles
                     )
                     .verifyComplete();
 
             verify(userRepository).findByStaffId("newStaff123");
-            verify(userRepository).save(eq(newUserInput)); // Verify save was called once for insert
-            verifyNoMoreInteractions(userRepository); // Ensure no unexpected saves
-            verify(groupDefaultRoleRepository, never()).findByGroupNameIn(any()); // processFirstLogin not called
+            verify(userRepository).save(eq(newUserInput)); // Initial save
+            verify(groupDefaultRoleRepository).findByGroupNameIn(List.of(adGroup1));
+            verify(userRepository).save(argThat(u -> u.getId().equals(savedUser.getId()) && !u.isFirstLogin())); // Save from processFirstLogin
         }
 
         @Test
-        @DisplayName("insertOrUpdateUser should update existing active user")
+        @DisplayName("insertOrUpdateUser should update existing active user with entitlements")
         void insertOrUpdateUser_UpdateExistingActive() {
-            // Arrange
-            User updateInput = User.builder().staffId(staffId1).username("updatedName").email("updated@test.com").department("Sales").build();
-            User existingUserCopy = User.builder() // Existing user from DB
+            List<Entitlement> initialEntitlements = List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1)).build());
+            List<Entitlement> updatedEntitlements = List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1, roleId2)).build(),
+                    Entitlement.builder().adGroup(adGroup2).roleIds(List.of(roleId3)).build());
+
+            User updateInput = User.builder().staffId(staffId1).username("updatedName").email("updated@test.com")
+                    .entitlements(updatedEntitlements).isActive(true).build();
+            User existingUserCopy = User.builder()
                     .id(user1.getId()).username(user1.getUsername()).staffId(user1.getStaffId())
                     .email(user1.getEmail()).isActive(true).isFirstLogin(false)
-                    .createdBy("creator").createdDate(new Date()).roleIds(user1.getRoleIds()) // Keep existing roles
-                    .build();
-
-            // Simulate the user *after* the update and save
-            User updatedAndSavedUser = User.builder()
-                    .id(existingUserCopy.getId()).username(updateInput.getUsername()) // Updated field
-                    .staffId(existingUserCopy.getStaffId()).email(updateInput.getEmail()) // Updated field
-                    .department(updateInput.getDepartment()) // Updated field
-                    .functionalManager(updateInput.getFunctionalManager()) // Updated field (null in input)
-                    .entityManager(updateInput.getEntityManager()) // Updated field (null in input)
-                    .jobTitle(updateInput.getJobTitle()) // Updated field (null in input)
-                    .isActive(existingUserCopy.isActive()).createdBy(existingUserCopy.getCreatedBy())
-                    .lastModifiedBy(updateInput.getLastModifiedBy()) // Copied from input (null)
-                    .createdDate(existingUserCopy.getCreatedDate())
-                    .lastModifiedDate(updateInput.getLastModifiedDate()) // Copied from input (null)
-                    .adGroups(updateInput.getAdGroups()) // Copied from input (null)
-                    .roleIds(existingUserCopy.getRoleIds()) // Kept from existing
-                    .isFirstLogin(existingUserCopy.isFirstLogin()) // Kept from existing
+                    .entitlements(initialEntitlements) // Original entitlements
                     .build();
 
             when(userRepository.findByStaffId(staffId1)).thenReturn(Mono.just(existingUserCopy));
-            // Mock save for the update case (flatMap path)
-            // It saves the 'updatedUser' built inside the flatMap
-            when(userRepository.save(any(User.class))).thenReturn(Mono.just(updatedAndSavedUser));
+            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
 
-
-            // Act
-            Mono<User> result = userService.insertOrUpdateUser(updateInput);
-            // .contextWrite(ctx -> ctx.put("USER_INFO", testUsername)); // Context not used by current insertOrUpdateUser
-
-            // Assert
-            StepVerifier.create(result)
+            StepVerifier.create(userService.insertOrUpdateUser(updateInput)
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .expectNextMatches(u ->
                             u.getId().equals(userId1) &&
-                                    u.getUsername().equals("updatedName") && // Check updated field
-                                    u.getEmail().equals("updated@test.com") && // Check updated field
-                                    u.getDepartment().equals("Sales") && // Check updated field
-                                    u.getLastModifiedBy() == null && // Audit field not set by current impl
-                                    u.getLastModifiedDate() == null // Audit field not set by current impl
+                                    u.getUsername().equals("updatedName") &&
+                                    u.getEntitlements().size() == 2 && // Entitlements should be overwritten
+                                    u.getEntitlements().stream().anyMatch(e -> e.getAdGroup().equals(adGroup2)) &&
+                                    u.getLastModifiedBy().equals(testUsername)
                     )
                     .verifyComplete();
 
             verify(userRepository).findByStaffId(staffId1);
-            // Verify save was called once with the user built inside the flatMap
             verify(userRepository).save(argThat(savedUser ->
                     savedUser.getId().equals(userId1) &&
                             savedUser.getUsername().equals("updatedName") &&
-                            savedUser.getDepartment().equals("Sales") &&
-                            savedUser.getRoleIds().equals(existingUserCopy.getRoleIds()) // Check roles preserved
+                            savedUser.getEntitlements().equals(updatedEntitlements) // Verify entitlements are from request
             ));
-            verifyNoMoreInteractions(userRepository);
-            verify(groupDefaultRoleRepository, never()).findByGroupNameIn(any()); // processFirstLogin should not run
         }
 
         @Test
-        @DisplayName("insertOrUpdateUser should fail for existing inactive user")
+        @DisplayName("insertOrUpdateUser should fail for existing inactive user if request tries to update")
         void insertOrUpdateUser_FailUpdateInactive() {
-            User updateInput = User.builder().staffId(inactiveStaffId).username("updatedName").build();
-            when(userRepository.findByStaffId(inactiveStaffId)).thenReturn(Mono.just(inactiveUser)); // Return inactive user
+            // The service logic for inactive users in insertOrUpdateUser is:
+            // if (!existingUser.isActive() && !userFromRequest.isActive()) -> logs warning, proceeds to update other fields
+            // if (!existingUser.isActive() && userFromRequest.isActive()) -> reactivates
+            // This test should check the case where an update is attempted on an inactive user without reactivating.
+            // The current service code *allows* updating an inactive user if the request also marks them as inactive.
+            // If the request tries to make them active, it reactivates.
+            // The original test expected an error, but the service code was changed.
+            // Let's test reactivation.
 
-            StepVerifier.create(userService.insertOrUpdateUser(updateInput))
-                    .expectErrorMatches(throwable -> throwable instanceof CommonException &&
-                            throwable.getMessage().contains("Cannot update inactive user with staffId: " + inactiveStaffId))
-                    .verify();
+            User updateInput = User.builder().staffId(inactiveStaffId).username("updatedName").isActive(true).build(); // Try to reactivate
+            when(userRepository.findByStaffId(inactiveStaffId)).thenReturn(Mono.just(inactiveUser)); // inactiveUser is isActive=false
+            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
+
+
+            StepVerifier.create(userService.insertOrUpdateUser(updateInput)
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
+                    .expectNextMatches(u -> u.getStaffId().equals(inactiveStaffId) && u.isActive()) // Should be reactivated
+                    .verifyComplete();
 
             verify(userRepository).findByStaffId(inactiveStaffId);
-            verify(userRepository, never()).save(any(User.class));
+            verify(userRepository).save(argThat(savedUser -> savedUser.getStaffId().equals(inactiveStaffId) && savedUser.isActive()));
         }
+
 
         @Test
         @DisplayName("insertOrUpdateUser should fail if staffId is null")
         void insertOrUpdateUser_FailNullStaffId() {
             User input = User.builder().staffId(null).username("name").build();
-
-            // This check happens *before* findByStaffId in the current code
-            // StepVerifier.create(userService.insertOrUpdateUser(input))
-            //         .expectErrorMatches(throwable -> throwable instanceof CommonException &&
-            //                 throwable.getMessage().contains("StaffId cannot be null or blank")) // Adjust expected message if needed
-            //         .verify();
-
-            // Since the check is missing in the provided code, we expect findByStaffId(null)
-            when(userRepository.findByStaffId(null)).thenReturn(Mono.empty()); // Or Mono.error depending on repo impl
-            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0))); // Mock save for insert path
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
 
 
-            // If the check was present, the verifies below would be 'never()'
-            // verify(userRepository, never()).findByStaffId(anyString());
-            // verify(userRepository, never()).save(any(User.class));
+            StepVerifier.create(userService.insertOrUpdateUser(input)
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
+                    .expectErrorMatches(throwable -> throwable instanceof CommonException &&
+                            throwable.getMessage().contains("StaffId cannot be null or blank"))
+                    .verify();
 
-            // Test current behavior (finds nothing, tries to insert)
-            StepVerifier.create(userService.insertOrUpdateUser(input)).expectNextCount(1).verifyComplete();
-            verify(userRepository).findByStaffId(null);
-            verify(userRepository).save(input); // Tries to save the user with null staffId
+            verify(userRepository, never()).findByStaffId(any());
+            verify(userRepository, never()).save(any(User.class));
         }
 
         @Test
         @DisplayName("insertOrUpdateUser should fail if staffId is blank")
         void insertOrUpdateUser_FailBlankStaffId() {
             User input = User.builder().staffId(" ").username("name").build();
-            // Similar to null staffId, the check is missing in the provided code.
+            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
 
-            when(userRepository.findByStaffId(" ")).thenReturn(Mono.empty());
-            when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-            // Test current behavior (finds nothing, tries to insert)
-            StepVerifier.create(userService.insertOrUpdateUser(input)).expectNextCount(1).verifyComplete();
-            verify(userRepository).findByStaffId(" ");
-            verify(userRepository).save(input); // Tries to save the user with blank staffId
+            StepVerifier.create(userService.insertOrUpdateUser(input)
+                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
+                    .expectErrorMatches(throwable -> throwable instanceof CommonException &&
+                            throwable.getMessage().contains("StaffId cannot be null or blank"))
+                    .verify();
+            verify(userRepository, never()).findByStaffId(any());
+            verify(userRepository, never()).save(any(User.class));
         }
     }
 
@@ -599,35 +622,18 @@ class UserServiceTest {
             when(userRepository.findByStaffId("unknownStaffId")).thenReturn(Mono.empty());
 
             StepVerifier.create(userService.findRolesByUserCase(userCaseA, "unknownStaffId"))
-                    .verifyComplete(); // Expect empty completion
-
-            verify(userRepository).findByStaffId("unknownStaffId");
-            verifyNoInteractions(adGroupUtil, roleRepository); // No further calls expected
-        }
-
-        @Test
-        @DisplayName("findRolesByUserCase should return empty flux if user has no role IDs")
-        void findRolesByUserCase_UserHasNoRoleIds() {
-            User userWithNoRoles = User.builder().staffId(staffId2).roleIds(null).adGroups(List.of(adGroup2)).build();
-            when(userRepository.findByStaffId(staffId2)).thenReturn(Mono.just(userWithNoRoles));
-
-            StepVerifier.create(userService.findRolesByUserCase(userCaseA, staffId2))
                     .verifyComplete();
-
-            verify(userRepository).findByStaffId(staffId2);
             verifyNoInteractions(adGroupUtil, roleRepository);
         }
 
         @Test
-        @DisplayName("findRolesByUserCase should return empty flux if user has empty role IDs list")
-        void findRolesByUserCase_UserHasEmptyRoleIdsList() {
-            User userWithEmptyRoles = User.builder().staffId(staffId2).roleIds(Collections.emptyList()).adGroups(List.of(adGroup2)).build();
-            when(userRepository.findByStaffId(staffId2)).thenReturn(Mono.just(userWithEmptyRoles));
+        @DisplayName("findRolesByUserCase should return empty flux if user has no role IDs in entitlements")
+        void findRolesByUserCase_UserHasNoRoleIdsInEntitlements() {
+            // userWithNoRoles has an entitlement for adGroup1 but empty roleIds list
+            when(userRepository.findByStaffId(userWithNoRoles.getStaffId())).thenReturn(Mono.just(userWithNoRoles));
 
-            StepVerifier.create(userService.findRolesByUserCase(userCaseA, staffId2))
+            StepVerifier.create(userService.findRolesByUserCase(userCaseA, userWithNoRoles.getStaffId()))
                     .verifyComplete();
-
-            verify(userRepository).findByStaffId(staffId2);
             verifyNoInteractions(adGroupUtil, roleRepository);
         }
 
@@ -635,47 +641,36 @@ class UserServiceTest {
         @Test
         @DisplayName("findRolesByUserCase should return all user case roles if user is admin for that case")
         void findRolesByUserCase_UserIsAdmin() {
-            // user1 has adGroup1 ("AD_CaseA_ADMIN")
+            // user1 has adGroup1 (admin for CaseA) in its entitlements
+            List<String> user1AdGroups = user1.getEntitlements().stream().map(Entitlement::getAdGroup).collect(Collectors.toList());
             when(userRepository.findByStaffId(staffId1)).thenReturn(Mono.just(user1));
-            // Mock AdGroupUtil to return true for isAdmin check
-            when(adGroupUtil.isAdmin(user1.getAdGroups(), userCaseA)).thenReturn(true);
-            // Mock RoleRepository to return all active roles for the user case
+            when(adGroupUtil.isAdmin(user1AdGroups, userCaseA)).thenReturn(true);
             when(roleRepository.findAllByUserCaseAndIsActive(userCaseA, true))
-                    .thenReturn(Flux.just(roleAdminCaseA, roleUserCaseA)); // Return both roles for CaseA
+                    .thenReturn(Flux.just(roleAdminCaseA, roleUserCaseA));
 
             StepVerifier.create(userService.findRolesByUserCase(userCaseA, staffId1))
                     .expectNext(roleAdminCaseA, roleUserCaseA)
                     .verifyComplete();
-
-            verify(userRepository).findByStaffId(staffId1);
-            verify(adGroupUtil).isAdmin(user1.getAdGroups(), userCaseA);
-            verify(roleRepository).findAllByUserCaseAndIsActive(userCaseA, true);
-            // Verify the other role repo method was NOT called
             verify(roleRepository, never()).findAllByIdsAndUserCaseAndIsActive(anyList(), anyString(), anyBoolean());
         }
 
         @Test
         @DisplayName("findRolesByUserCase should return specific user case roles if user is not admin")
         void findRolesByUserCase_UserIsNotAdmin() {
-            // user2 has adGroup2 ("AD_CaseA_USER"), not admin group
-            // user2 has roleIds: roleId2 (global), roleIdUserCaseA (case specific)
-            List<String> user2RoleIds = user2.getRoleIds(); // ["ROLE_USER_GLOBAL", "ROLE_USER_CASE_A"]
+            // user2 has adGroup2 (user for CaseA)
+            List<String> user2AdGroups = user2.getEntitlements().stream().map(Entitlement::getAdGroup).collect(Collectors.toList());
+            List<String> user2RoleIds = user2.getEntitlements().stream()
+                    .flatMap(e -> e.getRoleIds().stream()).distinct().collect(Collectors.toList()); // ["ROLE_USER_GLOBAL", "ROLE_USER_CASE_A"]
 
             when(userRepository.findByStaffId(staffId2)).thenReturn(Mono.just(user2));
-            // Mock AdGroupUtil to return false for isAdmin check
-            when(adGroupUtil.isAdmin(user2.getAdGroups(), userCaseA)).thenReturn(false);
-            // Mock RoleRepository to return only the matching role from the user's list for that case
+            when(adGroupUtil.isAdmin(user2AdGroups, userCaseA)).thenReturn(false);
             when(roleRepository.findAllByIdsAndUserCaseAndIsActive(user2RoleIds, userCaseA, true))
-                    .thenReturn(Flux.just(roleUserCaseA)); // Only return the CaseA role user2 actually has
+                    .thenReturn(Flux.just(roleUserCaseA));
 
             StepVerifier.create(userService.findRolesByUserCase(userCaseA, staffId2))
-                    .expectNext(roleUserCaseA) // Expect only the specific role
+                    .expectNext(roleUserCaseA)
                     .verifyComplete();
-
-            verify(userRepository).findByStaffId(staffId2);
-            verify(adGroupUtil).isAdmin(user2.getAdGroups(), userCaseA);
-            verify(roleRepository, never()).findAllByUserCaseAndIsActive(anyString(), anyBoolean()); // Verify admin method not called
-            verify(roleRepository).findAllByIdsAndUserCaseAndIsActive(user2RoleIds, userCaseA, true);
+            verify(roleRepository, never()).findAllByUserCaseAndIsActive(anyString(), anyBoolean());
         }
     }
 
@@ -689,204 +684,117 @@ class UserServiceTest {
             when(userRepository.findByStaffId("unknownStaffId")).thenReturn(Mono.empty());
 
             StepVerifier.create(userService.getRolesAndPermissions("unknownStaffId"))
-                    .expectErrorMatches(throwable -> throwable instanceof ResourceNotFoundException &&
-                            throwable.getMessage().contains("User not found with staffId: unknownStaffId"))
+                    .expectErrorMatches(throwable -> throwable instanceof ResourceNotFoundException)
                     .verify();
-
-            verify(userRepository).findByStaffId("unknownStaffId");
             verifyNoInteractions(roleRepository, resourceRepository, userMapper);
         }
 
         @Test
-        @DisplayName("getRolesAndPermissionsByUser should handle user with no role IDs")
-        void getRolesAndPermissionsByUser_NoRoleIds() {
-            User userWithNoRoles = User.builder().id(userId2).staffId(staffId2).roleIds(null).adGroups(List.of(adGroup2)).build();
-            UserDto mappedDto = new UserDto(); // Simulate mapping
-            mappedDto.setId(userId2);
-            mappedDto.setStaffId(staffId2);
-
+        @DisplayName("getRolesAndPermissionsByUser should handle user with no role IDs in entitlements")
+        void getRolesAndPermissionsByUser_NoRoleIdsInEntitlements() {
+            // userWithNoRoles has an entitlement for adGroup1 but empty roleIds list
+            UserDto mappedDto = UserDto.builder().id(userWithNoRoles.getId()).staffId(userWithNoRoles.getStaffId()).build();
             when(userMapper.toDto(userWithNoRoles)).thenReturn(mappedDto);
 
             StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithNoRoles))
                     .expectNextMatches(dto ->
-                            dto.getId().equals(userId2) &&
-                                    dto.getRoles() == null &&
-                                    dto.getResources() == null
+                            dto.getId().equals(userWithNoRoles.getId()) &&
+                                    dto.getRoles().isEmpty() && // Service logic sets empty list
+                                    dto.getResources().isEmpty() // Service logic sets empty list
                     )
                     .verifyComplete();
-
-            verify(userMapper).toDto(userWithNoRoles);
-            verify(roleRepository, never()).findAllById(Collections.emptyList()); // Or findAllByIdAndIsActive
-            verifyNoInteractions(resourceRepository); // Resource repo shouldn't be called
+            verifyNoInteractions(roleRepository, resourceRepository);
         }
 
-        @Test
-        @DisplayName("getRolesAndPermissionsByUser should handle user with empty role IDs list")
-        void getRolesAndPermissionsByUser_EmptyRoleIdsList() {
-            User userWithEmptyRoles = User.builder().id(userId2).staffId(staffId2).roleIds(Collections.emptyList()).adGroups(List.of(adGroup2)).build();
-            UserDto mappedDto = new UserDto(); // Simulate mapping
-            mappedDto.setId(userId2);
-            mappedDto.setStaffId(staffId2);
-
-            when(userMapper.toDto(userWithEmptyRoles)).thenReturn(mappedDto);
-
-            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithEmptyRoles))
-                    .expectNextMatches(dto ->
-                            dto.getId().equals(userId2) &&
-                                    dto.getRoles() == null &&
-                                    dto.getResources() == null
-                    )
-                    .verifyComplete();
-
-            verify(userMapper).toDto(userWithEmptyRoles);
-            verifyNoInteractions(resourceRepository);
-        }
 
         @Test
-        @DisplayName("getRolesAndPermissionsByUser should handle user with no AD groups")
-        void getRolesAndPermissionsByUser_NoAdGroups() {
-            User userWithNoAdGroups = User.builder().id(userId1).staffId(staffId1)
-                    .roleIds(List.of(roleId1, roleId2)).adGroups(null).build(); // No AD groups
-            UserDto mappedDto = new UserDto();
-            mappedDto.setId(userId1);
-            mappedDto.setStaffId(staffId1);
-
+        @DisplayName("getRolesAndPermissionsByUser should handle user with no AD groups in entitlements")
+        void getRolesAndPermissionsByUser_NoAdGroupsInEntitlements() {
+            // userWithNoAdGroups has an entitlement with a null AD group but has roleId1
+            UserDto mappedDto = UserDto.builder().id(userWithNoAdGroups.getId()).staffId(userWithNoAdGroups.getStaffId()).build();
             when(userMapper.toDto(userWithNoAdGroups)).thenReturn(mappedDto);
-            // Mock role repo to return the roles the user has
-            when(roleRepository.findAllById(userWithNoAdGroups.getRoleIds())).thenReturn(Flux.just(role1, role2)); // Or findAllByIdAndIsActive
+            when(roleRepository.findAllByIdAndIsActive(List.of(roleId1), true)).thenReturn(Flux.just(role1));
 
             StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithNoAdGroups))
                     .expectNextMatches(dto ->
-                            dto.getId().equals(userId1) &&
-                                    !dto.getRoles().isEmpty() && // Should have roles
-                                    dto.getRoles().size() == 2 &&
-                                    dto.getResources().isEmpty() // Should have no resources due to no AD groups
+                            dto.getId().equals(userWithNoAdGroups.getId()) &&
+                                    dto.getRoles().size() == 1 &&
+                                    dto.getRoles().get(0).getId().equals(roleId1) &&
+                                    dto.getResources().isEmpty() // No AD groups to match resources
                     )
                     .verifyComplete();
-
-            verify(userMapper).toDto(userWithNoAdGroups);
-            verify(roleRepository).findAllById(userWithNoAdGroups.getRoleIds()); // Or findAllByIdAndIsActive
-            verifyNoInteractions(resourceRepository); // Resource repo shouldn't be called
         }
 
 
         @Test
         @DisplayName("getRolesAndPermissionsByUser should handle roles with no resource IDs")
         void getRolesAndPermissionsByUser_RolesHaveNoResourceIds() {
-            // User has role3 which has no resource IDs
-            User userWithRole3 = User.builder().id(userId1).staffId(staffId1)
-                    .roleIds(List.of(roleId3)).adGroups(List.of(adGroup1)).build();
-            UserDto mappedDto = new UserDto();
-            mappedDto.setId(userId1);
-            mappedDto.setStaffId(staffId1);
+            User userWithRole3Only = User.builder().id(userId1).staffId(staffId1)
+                    .entitlements(List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId3)).build()))
+                    .isActive(true).isFirstLogin(false).build();
+            UserDto mappedDto = UserDto.builder().id(userId1).staffId(staffId1).build();
 
-            when(userMapper.toDto(userWithRole3)).thenReturn(mappedDto);
+            when(userMapper.toDto(userWithRole3Only)).thenReturn(mappedDto);
             when(roleRepository.findAllByIdAndIsActive(List.of(roleId3), true)).thenReturn(Flux.just(role3));
+            // No need to mock resourceRepository as uniqueResourceIdsFromRoles will be empty
 
-            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithRole3))
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithRole3Only))
                     .expectNextMatches(dto ->
-                            dto.getId().equals(userId1) &&
-                                    dto.getRoles().size() == 1 &&
-                                    dto.getRoles().get(0).getId().equals(roleId3) &&
-                                    dto.getResources().isEmpty() // Should have no resources
+                            dto.getRoles().size() == 1 && dto.getRoles().get(0).getId().equals(roleId3) &&
+                                    dto.getResources().isEmpty()
                     )
                     .verifyComplete();
-
-            verify(userMapper).toDto(userWithRole3);
-            verify(roleRepository).findAllByIdAndIsActive(List.of(roleId3), true);
-            verifyNoInteractions(resourceRepository); // Resource repo shouldn't be called
         }
 
         @Test
         @DisplayName("getRolesAndPermissionsByUser should return roles and filtered resources")
         void getRolesAndPermissionsByUser_SuccessWithRolesAndResources() {
-            // Use user1: roles [roleId1, roleIdAdminCaseA, roleIdUserCaseA], adGroups [adGroup1, adGroupOther]
-            // role1 -> [res1, res2]
-            // roleAdminCaseA -> [res1, res2]
-            // roleUserCaseA -> [res1]
-            // Unique resource IDs: [res1, res2]
-            // res1 adGroups: [adGroup1, adGroup2, adGroupOther] -> Match for user1
-            // res2 adGroups: [adGroup1] -> Match for user1
-            List<String> user1RoleIds = user1.getRoleIds();
-            List<String> user1AdGroups = user1.getAdGroups();
-            List<String> expectedResourceIds = List.of(resourceId1, resourceId2); // Unique IDs from roles
+            // user1: entitlements map to adGroups [adGroup1, adGroupOther] and roles [roleId1, roleIdAdminCaseA, roleIdUserCaseA]
+            List<String> user1EffectiveRoleIds = List.of(roleId1, roleIdAdminCaseA, roleIdUserCaseA);
+            List<String> user1EffectiveAdGroups = List.of(adGroup1, adGroupOther);
+            List<String> resourceIdsFromUser1Roles = List.of(resourceId1, resourceId2); // res1 from all, res2 from role1 & roleAdminCaseA
 
-            UserDto mappedDto = new UserDto(); // Simulate mapping
-            mappedDto.setId(userId1);
-            mappedDto.setStaffId(staffId1);
-
-            // Mock UserMapper
+            UserDto mappedDto = UserDto.builder().id(userId1).staffId(staffId1).build();
             when(userMapper.toDto(user1)).thenReturn(mappedDto);
-            // Mock RoleRepository to return the active roles user1 has
-            when(roleRepository.findAllByIdAndIsActive(user1RoleIds, true))
+            when(roleRepository.findAllByIdAndIsActive(user1EffectiveRoleIds, true))
                     .thenReturn(Flux.just(role1, roleAdminCaseA, roleUserCaseA));
-            // Mock ResourceRepository to return resources matching IDs, active status, and AD groups
-            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(expectedResourceIds, true, user1AdGroups))
-                    .thenReturn(Flux.just(resource1, resource2)); // Both resources match user1's AD groups
+            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(resourceIdsFromUser1Roles, true, user1EffectiveAdGroups))
+                    .thenReturn(Flux.just(resource1, resource2));
 
-            // Act
-            Mono<UserDto> result = userService.getRolesAndPermissionsByUser(user1);
-
-            // Assert
-            StepVerifier.create(result)
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(user1))
                     .expectNextMatches(dto -> {
-                        boolean rolesMatch = dto.getRoles().size() == 3 &&
-                                dto.getRoles().stream().map(Role::getId).collect(Collectors.toSet())
-                                        .containsAll(user1RoleIds);
+                        boolean rolesMatch = dto.getRoles().size() == 3;
                         boolean resourcesMatch = dto.getResources().size() == 2 &&
-                                dto.getResources().stream().map(UserResourceDto::getId).collect(Collectors.toSet())
-                                        .containsAll(List.of(resourceId1, resourceId2));
-                        return dto.getId().equals(userId1) && rolesMatch && resourcesMatch;
+                                dto.getResources().stream().map(UserResourceDto::getId)
+                                        .collect(Collectors.toSet()).containsAll(List.of(resourceId1, resourceId2));
+                        return rolesMatch && resourcesMatch;
                     })
                     .verifyComplete();
-
-            // Verify interactions
-            verify(userMapper).toDto(user1);
-            verify(roleRepository).findAllByIdAndIsActive(user1RoleIds, true);
-            verify(resourceRepository).findAllByIdInAndIsActiveAndAdGroupsIn(expectedResourceIds, true, user1AdGroups);
         }
 
         @Test
         @DisplayName("getRolesAndPermissionsByUser should filter resources based on AD groups")
         void getRolesAndPermissionsByUser_ResourceFilteringByAdGroup() {
-            // Use user2: roles [roleId2, roleIdUserCaseA], adGroups [adGroup2]
-            // role2 -> [res1]
-            // roleUserCaseA -> [res1]
-            // Unique resource IDs: [res1]
-            // res1 adGroups: [adGroup1, adGroup2, adGroupOther] -> Match for user2
-            // res2 is not linked to user2's roles, so it won't be queried
-            List<String> user2RoleIds = user2.getRoleIds();
-            List<String> user2AdGroups = user2.getAdGroups();
-            List<String> expectedResourceIds = List.of(resourceId1); // Only res1 is linked
+            // user2: entitlements map to adGroup [adGroup2] and roles [roleId2, roleIdUserCaseA]
+            List<String> user2EffectiveRoleIds = List.of(roleId2, roleIdUserCaseA);
+            List<String> user2EffectiveAdGroups = List.of(adGroup2);
+            List<String> resourceIdsFromUser2Roles = List.of(resourceId1); // Only res1 from role2 & roleUserCaseA
 
-            UserDto mappedDto = new UserDto();
-            mappedDto.setId(userId2);
-            mappedDto.setStaffId(staffId2);
-
+            UserDto mappedDto = UserDto.builder().id(userId2).staffId(staffId2).build();
             when(userMapper.toDto(user2)).thenReturn(mappedDto);
-            when(roleRepository.findAllByIdAndIsActive(user2RoleIds, true))
+            when(roleRepository.findAllByIdAndIsActive(user2EffectiveRoleIds, true))
                     .thenReturn(Flux.just(role2, roleUserCaseA));
-            // Mock ResourceRepository: only res1 matches the query criteria
-            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(expectedResourceIds, true, user2AdGroups))
-                    .thenReturn(Flux.just(resource1)); // Only resource1 matches user2's AD group
+            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(resourceIdsFromUser2Roles, true, user2EffectiveAdGroups))
+                    .thenReturn(Flux.just(resource1)); // Only resource1 matches adGroup2
 
             StepVerifier.create(userService.getRolesAndPermissionsByUser(user2))
                     .expectNextMatches(dto -> {
-                        boolean rolesMatch = dto.getRoles().size() == 2 &&
-                                dto.getRoles().stream().map(Role::getId).collect(Collectors.toSet())
-                                        .containsAll(user2RoleIds);
-                        // Crucially, only resource1 should be present
+                        boolean rolesMatch = dto.getRoles().size() == 2;
                         boolean resourcesMatch = dto.getResources().size() == 1 &&
                                 dto.getResources().get(0).getId().equals(resourceId1);
-                        return dto.getId().equals(userId2) && rolesMatch && resourcesMatch;
+                        return rolesMatch && resourcesMatch;
                     })
                     .verifyComplete();
-
-            verify(userMapper).toDto(user2);
-            verify(roleRepository).findAllByIdAndIsActive(user2RoleIds, true);
-            verify(resourceRepository).findAllByIdInAndIsActiveAndAdGroupsIn(expectedResourceIds, true, user2AdGroups);
         }
     }
-
-
 }

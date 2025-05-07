@@ -50,8 +50,7 @@ public class User {
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private Date lastModifiedDate;
 
-    private List<String> adGroups;
-    private List<String> roleIds;
+    private List<Entitlement> entitlements;
     @Builder.Default // Add default for isFirstLogin if needed
     private boolean isFirstLogin = true;
 }
