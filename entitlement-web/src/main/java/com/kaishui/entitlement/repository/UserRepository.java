@@ -14,10 +14,10 @@ public interface UserRepository extends ReactiveMongoRepository<User, String> {
     Mono<User> findByStaffId(String staffId);
 
     @Aggregation(pipeline = {
-            "{ $match: { 'adGroups': { $in: ?0 }, 'isActive': ?1} }"
-
+            // Corrected to query within the 'entitlements' array
+            "{ $match: { 'entitlements.adGroup': ?0, 'isActive': ?1} }"
     })
-    Flux<User> findByAdGroupAndIsActive(String nextLevelADGroup, boolean isActive);
+    Flux<User> findByAdGroupAndIsActive(String adGroup, boolean isActive); // Parameter name changed for clarity
 
 //    @Aggregation(pipeline = {
 //            "{ '$group': { '_id': '$department', 'count': { '$sum': 1 } } }",

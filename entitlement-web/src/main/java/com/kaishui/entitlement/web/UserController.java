@@ -3,9 +3,11 @@ package com.kaishui.entitlement.web;
 import com.kaishui.entitlement.annotation.AuditLog;
 import com.kaishui.entitlement.entity.Role;
 import com.kaishui.entitlement.entity.User;
+import com.kaishui.entitlement.entity.dto.UserCreateDto;
 import com.kaishui.entitlement.entity.dto.UserDto;
 import com.kaishui.entitlement.service.UserService;
 import com.kaishui.entitlement.util.AuthorizationUtil;
+import com.kaishui.entitlement.util.UserMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -29,6 +31,7 @@ import reactor.core.publisher.Mono;
 public class UserController {
 
     private final UserService userService;
+    private final UserMapper userMapper;
     private final AuthorizationUtil authorizationUtil;
 
     @Operation(summary = "Get all users", responses = {
@@ -54,8 +57,11 @@ public class UserController {
             @ApiResponse(responseCode = "201", description = "User created", content = @Content(mediaType = "application/json", schema = @Schema(implementation = User.class)))
     })
     @PostMapping
-    public Mono<ResponseEntity<UserDto>> createUser(@Valid @RequestBody User user) { // Add @Valid
-        return userService.insertOrUpdateUser(user)
+    public Mono<ResponseEntity<UserDto>> createUser(@Valid @RequestBody UserCreateDto user, ServerHttpRequest request) { // Add @Valid
+        User userEntity = userMapper.toEntity(user);
+        String staffId = authorizationUtil.getStaffIdFromToken(request);
+        userEntity.setLastModifiedBy(staffId);
+        return userService.insertOrUpdateUser(userEntity)
                 .flatMap(userService::processFirstLogin) // Process first login
                 .flatMap(userService::getRolesAndPermissionsByUser)
                 .map(createdUser -> ResponseEntity.status(HttpStatus.CREATED).body(createdUser))

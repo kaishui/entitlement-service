@@ -14,7 +14,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserDto {
+public class UserCreateDto {
     @Schema(accessMode = Schema.AccessMode.READ_ONLY) // Mark as read-only for OpenAPI
     private String id;
 
@@ -43,9 +43,7 @@ public class UserDto {
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private Date lastModifiedDate;
 
-    private List<EntitlementDto> entitlements;
-
-    private List<UserResourceDto> resources;
+    private List<String> adGroups;
     @Builder.Default // Add default for isFirstLogin if needed
     private boolean isFirstLogin = true;
 }

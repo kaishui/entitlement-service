@@ -1,6 +1,7 @@
 package com.kaishui.entitlement.service;
 
-import com.kaishui.entitlement.entity.*; // Import Entitlement
+import com.kaishui.entitlement.entity.*;
+import com.kaishui.entitlement.entity.dto.EntitlementDto; // Ensure this is imported
 import com.kaishui.entitlement.entity.dto.UserDto;
 import com.kaishui.entitlement.entity.dto.UserResourceDto;
 import com.kaishui.entitlement.exception.CommonException;
@@ -25,12 +26,13 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
-import java.util.*; // Import ArrayList, HashSet
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserService Tests")
@@ -59,7 +61,9 @@ class UserServiceTest {
     private Role role1, role2, role3, roleAdminCaseA, roleUserCaseA;
     private Resource resource1, resource2;
     private GroupDefaultRole groupRole1, groupRole2;
-    private UserDto userDto1;
+    // userDto1 is not directly used for getRolesAndPermissionsByUser assertions,
+    // as the service constructs the DTO and populates its complex fields.
+    // private UserDto userDto1;
 
     private final String userId1 = new ObjectId().toHexString();
     private final String userId2 = new ObjectId().toHexString();
@@ -90,7 +94,7 @@ class UserServiceTest {
     void setUp() {
         // --- User Setup with Entitlements ---
         Entitlement entitlementUser1Group1 = Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1, roleIdAdminCaseA)).build();
-        Entitlement entitlementUser1GroupOther = Entitlement.builder().adGroup(adGroupOther).roleIds(List.of(roleIdUserCaseA)).build(); // For broader role coverage
+        Entitlement entitlementUser1GroupOther = Entitlement.builder().adGroup(adGroupOther).roleIds(List.of(roleIdUserCaseA)).build();
         user1 = User.builder().id(userId1).username("userone").staffId(staffId1).email("one@test.com")
                 .isActive(true).isFirstLogin(false)
                 .entitlements(List.of(entitlementUser1Group1, entitlementUser1GroupOther))
@@ -103,10 +107,9 @@ class UserServiceTest {
                 .build();
 
         inactiveUser = User.builder().id(inactiveUserId).username("inactive").staffId(inactiveStaffId).email("inactive@test.com")
-                .isActive(false).isFirstLogin(false).entitlements(Collections.emptyList()) // Or null, depending on how you handle it
+                .isActive(false).isFirstLogin(false).entitlements(Collections.emptyList())
                 .build();
 
-        // For firstLoginUser, roles will be populated by processFirstLogin
         Entitlement firstLoginEntitlement1 = Entitlement.builder().adGroup(adGroup1).roleIds(new ArrayList<>()).build();
         Entitlement firstLoginEntitlement2 = Entitlement.builder().adGroup(adGroup2).roleIds(new ArrayList<>()).build();
         firstLoginUser = User.builder().id(firstLoginUserId).username("firstlogin").staffId(firstLoginStaffId).email("first@test.com")
@@ -119,7 +122,7 @@ class UserServiceTest {
                 .isActive(true).isFirstLogin(false).build();
 
         userWithNoAdGroups = User.builder().id(userWithNoAdGroupsId).staffId("noAdGroupsStaff")
-                .entitlements(List.of(Entitlement.builder().adGroup(null).roleIds(List.of(roleId1)).build())) // AD Group is null
+                .entitlements(List.of(Entitlement.builder().adGroup(null).roleIds(List.of(roleId1)).build()))
                 .isActive(true).isFirstLogin(false).build();
 
 
@@ -142,15 +145,215 @@ class UserServiceTest {
         groupRole1 = GroupDefaultRole.builder().groupName(adGroup1).roleIds(List.of(roleId1, roleId2)).build();
         groupRole2 = GroupDefaultRole.builder().groupName(adGroup2).roleIds(List.of(roleId2, roleId3)).build();
 
-        // --- DTO Setup ---
-        userDto1 = new UserDto();
-        userDto1.setId(userId1);
-        userDto1.setStaffId(staffId1);
+        // DTOs are now simpler as UserMapper only maps basic fields.
+        // The service populates entitlements and resources.
+        // userDto1 = UserDto.builder().id(userId1).staffId(staffId1).build(); // Example if needed elsewhere
     }
 
-    // ... GetUserTests, UpdateUserTests, DeleteUserTests remain largely the same as they don't directly test entitlement logic complexity ...
-    // Ensure that when findByStaffId or findById is mocked, the returned User object has the new 'entitlements' structure.
+    // ... Other test classes (GetUserTests, UpdateUserTests, DeleteUserTests, ProcessFirstLoginTests, InsertOrUpdateUserTests, FindRolesByUserCaseTests) ...
+    // These should remain largely the same, ensuring User objects are built with the 'entitlements' field.
 
+    @Nested
+    @DisplayName("Get Roles And Permissions Tests")
+    class GetRolesAndPermissionsTests {
+
+        @Test
+        @DisplayName("getRolesAndPermissions should return error if user not found")
+        void getRolesAndPermissions_UserNotFound() {
+            when(userRepository.findByStaffId("unknownStaffId")).thenReturn(Mono.empty());
+
+            StepVerifier.create(userService.getRolesAndPermissions("unknownStaffId"))
+                    .expectErrorMatches(throwable -> throwable instanceof ResourceNotFoundException)
+                    .verify();
+            verifyNoInteractions(roleRepository, resourceRepository, userMapper);
+        }
+
+        @Test
+        @DisplayName("getRolesAndPermissionsByUser should handle user with no entity entitlements")
+        void getRolesAndPermissionsByUser_NoEntityEntitlements() {
+            User userWithNoEntityEntitlements = User.builder().id(userId1).staffId(staffId1)
+                    .entitlements(Collections.emptyList()) // No entity entitlements
+                    .isActive(true).isFirstLogin(false).build();
+            // UserMapper.toDto will be called
+            UserDto basicDto = UserDto.builder().id(userId1).staffId(staffId1).build();
+            when(userMapper.toDto(userWithNoEntityEntitlements)).thenReturn(basicDto);
+
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithNoEntityEntitlements))
+                    .expectNextMatches(dto -> {
+                        assertThat(dto.getId()).isEqualTo(userId1);
+                        assertThat(dto.getEntitlements()).isNotNull().isEmpty();
+                        assertThat(dto.getResources()).isNotNull().isEmpty();
+                        return true;
+                    })
+                    .verifyComplete();
+            verify(userMapper).toDto(userWithNoEntityEntitlements);
+            verifyNoInteractions(roleRepository, resourceRepository);
+        }
+
+
+        @Test
+        @DisplayName("getRolesAndPermissionsByUser should handle user with entity entitlements but no role IDs")
+        void getRolesAndPermissionsByUser_NoRoleIdsInEntitlements() {
+            // userWithNoRoles has an entity Entitlement for adGroup1 but empty roleIds list
+            UserDto basicDto = UserDto.builder().id(userWithNoRoles.getId()).staffId(userWithNoRoles.getStaffId()).build();
+            when(userMapper.toDto(userWithNoRoles)).thenReturn(basicDto);
+            // roleRepository.findAllByIdAndIsActive will be called with an empty list for the entitlement
+            when(roleRepository.findAllByIdAndIsActive(Collections.emptyList(), true)).thenReturn(Flux.empty());
+
+
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithNoRoles))
+                    .expectNextMatches(dto -> {
+                        assertThat(dto.getId()).isEqualTo(userWithNoRoles.getId());
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto entitlementDto = dto.getEntitlements().get(0);
+                        assertThat(entitlementDto.getAdGroup()).isEqualTo(adGroup1);
+                        assertThat(entitlementDto.getRoles()).isNotNull().isEmpty();
+                        assertThat(dto.getResources()).isNotNull().isEmpty();
+                        return true;
+                    })
+                    .verifyComplete();
+            verify(userMapper).toDto(userWithNoRoles);
+            // Role repository is called for each entity entitlement's roleIds list.
+            // If userWithNoRoles.getEntitlements().get(0).getRoleIds() is empty, it will be called with empty list.
+            verify(roleRepository).findAllByIdAndIsActive(Collections.emptyList(), true);
+            verifyNoInteractions(resourceRepository); // No roles, so no resources
+        }
+
+
+        @Test
+        @DisplayName("getRolesAndPermissionsByUser should handle user with entity entitlements but null AD group")
+        void getRolesAndPermissionsByUser_NullAdGroupInEntitlement() {
+            // userWithNoAdGroups has an entity Entitlement with a null AD group but has roleId1
+            // The service logic in getRolesAndPermissionsByUser filters out entity entitlements with blank AD groups.
+            UserDto basicDto = UserDto.builder().id(userWithNoAdGroups.getId()).staffId(userWithNoAdGroups.getStaffId()).build();
+            when(userMapper.toDto(userWithNoAdGroups)).thenReturn(basicDto);
+            // Since the AD group is null, that entity entitlement will be skipped by the service.
+            // No call to roleRepository for that specific entitlement.
+
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithNoAdGroups))
+                    .expectNextMatches(dto -> {
+                        assertThat(dto.getId()).isEqualTo(userWithNoAdGroups.getId());
+                        assertThat(dto.getEntitlements()).isNotNull().isEmpty(); // Entitlement with null AD group is skipped
+                        assertThat(dto.getResources()).isNotNull().isEmpty();
+                        return true;
+                    })
+                    .verifyComplete();
+            verify(userMapper).toDto(userWithNoAdGroups);
+            // Role repository should not be called if the only entitlement has a null AD group
+            verifyNoInteractions(roleRepository, resourceRepository);
+        }
+
+
+        @Test
+        @DisplayName("getRolesAndPermissionsByUser should handle roles with no resource IDs")
+        void getRolesAndPermissionsByUser_RolesHaveNoResourceIds() {
+            User userWithRole3Only = User.builder().id(userId1).staffId(staffId1)
+                    .entitlements(List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId3)).build()))
+                    .isActive(true).isFirstLogin(false).build();
+            UserDto basicDto = UserDto.builder().id(userId1).staffId(staffId1).build();
+
+            when(userMapper.toDto(userWithRole3Only)).thenReturn(basicDto);
+            when(roleRepository.findAllByIdAndIsActive(List.of(roleId3), true)).thenReturn(Flux.just(role3)); // role3 has no resource IDs
+            // resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn will be called with an empty list of resource IDs
+
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithRole3Only))
+                    .expectNextMatches(dto -> {
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto edto = dto.getEntitlements().get(0);
+                        assertThat(edto.getAdGroup()).isEqualTo(adGroup1);
+                        assertThat(edto.getRoles()).hasSize(1);
+                        assertThat(edto.getRoles().get(0).getId()).isEqualTo(roleId3);
+                        assertThat(dto.getResources()).isNotNull().isEmpty(); // No resources from role3
+                        return true;
+                    })
+                    .verifyComplete();
+            verify(userMapper).toDto(userWithRole3Only);
+            verify(roleRepository).findAllByIdAndIsActive(List.of(roleId3), true);
+            // Resource repo will be called with empty list if role3.getResourceIds() is empty
+            verify(resourceRepository).findAllByIdInAndIsActiveAndAdGroupsIn(Collections.emptyList(), true, List.of(adGroup1));
+        }
+
+        @Test
+        @DisplayName("getRolesAndPermissionsByUser should return DTO with entitlements and filtered resources")
+        void getRolesAndPermissionsByUser_SuccessWithEntitlementsAndResources() {
+            // user1 has two entity Entitlements:
+            // 1. adGroup1 with roleIds [roleId1, roleIdAdminCaseA]
+            // 2. adGroupOther with roleIds [roleIdUserCaseA]
+            UserDto basicDto = UserDto.builder().id(userId1).staffId(staffId1).build();
+            when(userMapper.toDto(user1)).thenReturn(basicDto);
+
+            // Mock role fetching for each entity entitlement
+            when(roleRepository.findAllByIdAndIsActive(List.of(roleId1, roleIdAdminCaseA), true))
+                    .thenReturn(Flux.just(role1, roleAdminCaseA));
+            when(roleRepository.findAllByIdAndIsActive(List.of(roleIdUserCaseA), true))
+                    .thenReturn(Flux.just(roleUserCaseA));
+
+            // All unique resource IDs from these roles: [resourceId1, resourceId2] (from role1, roleAdminCaseA, roleUserCaseA)
+            // All unique AD groups from user1's entity entitlements: [adGroup1, adGroupOther]
+            List<String> allResourceIds = List.of(resourceId1, resourceId2);
+            List<String> allAdGroups = List.of(adGroup1, adGroupOther);
+            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(allResourceIds, true, allAdGroups))
+                    .thenReturn(Flux.just(resource1, resource2)); // Both resources match these AD groups
+
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(user1))
+                    .expectNextMatches(dto -> {
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(2);
+                        // Check first EntitlementDto
+                        Optional<EntitlementDto> edto1Opt = dto.getEntitlements().stream().filter(e -> e.getAdGroup().equals(adGroup1)).findFirst();
+                        assertThat(edto1Opt).isPresent();
+                        EntitlementDto edto1 = edto1Opt.get();
+                        assertThat(edto1.getRoles()).hasSize(2);
+                        assertThat(edto1.getRoles().stream().map(Role::getId).collect(Collectors.toSet())).containsExactlyInAnyOrder(roleId1, roleIdAdminCaseA);
+
+                        // Check second EntitlementDto
+                        Optional<EntitlementDto> edto2Opt = dto.getEntitlements().stream().filter(e -> e.getAdGroup().equals(adGroupOther)).findFirst();
+                        assertThat(edto2Opt).isPresent();
+                        EntitlementDto edto2 = edto2Opt.get();
+                        assertThat(edto2.getRoles()).hasSize(1);
+                        assertThat(edto2.getRoles().get(0).getId()).isEqualTo(roleIdUserCaseA);
+
+                        assertThat(dto.getResources()).hasSize(2);
+                        assertThat(dto.getResources().stream().map(UserResourceDto::getId).collect(Collectors.toSet()))
+                                .containsExactlyInAnyOrder(resourceId1, resourceId2);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("getRolesAndPermissionsByUser should filter resources based on AD groups in entitlements")
+        void getRolesAndPermissionsByUser_ResourceFilteringByAdGroup() {
+            // user2 has one entity Entitlement: adGroup2 with roleIds [roleId2, roleIdUserCaseA]
+            UserDto basicDto = UserDto.builder().id(userId2).staffId(staffId2).build();
+            when(userMapper.toDto(user2)).thenReturn(basicDto);
+
+            when(roleRepository.findAllByIdAndIsActive(List.of(roleId2, roleIdUserCaseA), true))
+                    .thenReturn(Flux.just(role2, roleUserCaseA));
+
+            // All unique resource IDs from these roles: [resourceId1] (from role2, roleUserCaseA)
+            // All unique AD groups from user2's entity entitlements: [adGroup2]
+            List<String> resourceIdsForUser2 = List.of(resourceId1);
+            List<String> adGroupsForUser2 = List.of(adGroup2);
+            // resource1 has adGroup2, resource2 does not.
+            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(resourceIdsForUser2, true, adGroupsForUser2))
+                    .thenReturn(Flux.just(resource1));
+
+            StepVerifier.create(userService.getRolesAndPermissionsByUser(user2))
+                    .expectNextMatches(dto -> {
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto edto = dto.getEntitlements().get(0);
+                        assertThat(edto.getAdGroup()).isEqualTo(adGroup2);
+                        assertThat(edto.getRoles()).hasSize(2);
+                        assertThat(edto.getRoles().stream().map(Role::getId).collect(Collectors.toSet())).containsExactlyInAnyOrder(roleId2, roleIdUserCaseA);
+
+                        assertThat(dto.getResources()).hasSize(1);
+                        assertThat(dto.getResources().get(0).getId()).isEqualTo(resourceId1);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+    }
+    // Other test classes like GetUserTests, UpdateUserTests, etc.
     @Nested
     @DisplayName("Get User Tests")
     class GetUserTests {
@@ -482,45 +685,49 @@ class UserServiceTest {
             User savedUser = User.builder().id(new ObjectId().toHexString()).staffId("newStaff123").username("newUser").email("new@test.com")
                     .entitlements(newUserInput.getEntitlements()).isFirstLogin(true).isActive(true) // Reflect input
                     .build();
-            User userAfterFirstLogin = User.builder().id(savedUser.getId()).staffId(savedUser.getStaffId())
-                    .entitlements(List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1, roleId2)).build())) // Roles assigned
-                    .isFirstLogin(false).isActive(true) // Flag updated
-                    .build();
-
+            // This test focuses on insertOrUpdateUser. processFirstLogin is tested separately.
+            // The UserController is responsible for calling processFirstLogin after insertOrUpdateUser.
+            // So, insertOrUpdateUser should return the user as saved, before processFirstLogin.
 
             when(userRepository.findByStaffId("newStaff123")).thenReturn(Mono.empty());
             when(userRepository.save(eq(newUserInput))).thenReturn(Mono.just(savedUser)); // Save before first login
             when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
-            // Mock processFirstLogin's internal calls
-            when(groupDefaultRoleRepository.findByGroupNameIn(List.of(adGroup1))).thenReturn(Flux.just(groupRole1));
-            when(userRepository.save(argThat(u -> u.getId().equals(savedUser.getId()) && !u.isFirstLogin()))) // Save after first login
-                    .thenReturn(Mono.just(userAfterFirstLogin));
 
 
             StepVerifier.create(userService.insertOrUpdateUser(newUserInput)
                             .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
                     .expectNextMatches(u ->
                             u.getId().equals(savedUser.getId()) &&
-                                    !u.isFirstLogin() && // Check first login flag
-                                    u.getEntitlements().get(0).getRoleIds().containsAll(List.of(roleId1, roleId2)) // Check roles
+                                    u.isFirstLogin() && // Should still be true, as processFirstLogin is separate
+                                    u.getEntitlements().get(0).getAdGroup().equals(adGroup1) &&
+                                    u.getEntitlements().get(0).getRoleIds().isEmpty() // Roles are empty initially
                     )
                     .verifyComplete();
 
             verify(userRepository).findByStaffId("newStaff123");
             verify(userRepository).save(eq(newUserInput)); // Initial save
-            verify(groupDefaultRoleRepository).findByGroupNameIn(List.of(adGroup1));
-            verify(userRepository).save(argThat(u -> u.getId().equals(savedUser.getId()) && !u.isFirstLogin())); // Save from processFirstLogin
+            // No verification of processFirstLogin's internal calls here, as it's not called by this method directly.
         }
 
         @Test
         @DisplayName("insertOrUpdateUser should update existing active user with entitlements")
         void insertOrUpdateUser_UpdateExistingActive() {
             List<Entitlement> initialEntitlements = List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1)).build());
-            List<Entitlement> updatedEntitlements = List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1, roleId2)).build(),
-                    Entitlement.builder().adGroup(adGroup2).roleIds(List.of(roleId3)).build());
+            // Request comes with AD groups, roles within these requested entitlements are typically empty or ignored by merge logic
+            // if the AD group already exists (roles are preserved from existing).
+            List<Entitlement> requestEntitlements = List.of(
+                    Entitlement.builder().adGroup(adGroup1).roleIds(Collections.emptyList()).build(), // Existing AD group
+                    Entitlement.builder().adGroup(adGroup2).roleIds(Collections.emptyList()).build()  // New AD group
+            );
+            // Expected merged entitlements: adGroup1 keeps its roles, adGroup2 is new with empty roles.
+            List<Entitlement> expectedMergedEntitlements = List.of(
+                    Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId1)).build(),
+                    Entitlement.builder().adGroup(adGroup2).roleIds(Collections.emptyList()).build()
+            );
+
 
             User updateInput = User.builder().staffId(staffId1).username("updatedName").email("updated@test.com")
-                    .entitlements(updatedEntitlements).isActive(true).build();
+                    .entitlements(requestEntitlements).isActive(true).build();
             User existingUserCopy = User.builder()
                     .id(user1.getId()).username(user1.getUsername()).staffId(user1.getStaffId())
                     .email(user1.getEmail()).isActive(true).isFirstLogin(false)
@@ -533,37 +740,39 @@ class UserServiceTest {
 
             StepVerifier.create(userService.insertOrUpdateUser(updateInput)
                             .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
-                    .expectNextMatches(u ->
-                            u.getId().equals(userId1) &&
-                                    u.getUsername().equals("updatedName") &&
-                                    u.getEntitlements().size() == 2 && // Entitlements should be overwritten
-                                    u.getEntitlements().stream().anyMatch(e -> e.getAdGroup().equals(adGroup2)) &&
-                                    u.getLastModifiedBy().equals(testUsername)
-                    )
+                    .expectNextMatches(u -> {
+                        assertThat(u.getId()).isEqualTo(userId1);
+                        assertThat(u.getUsername()).isEqualTo("updatedName");
+                        assertThat(u.getLastModifiedBy()).isEqualTo(testUsername);
+                        assertThat(u.getEntitlements()).isNotNull();
+                        // Convert to a map for easier comparison if order doesn't matter
+                        Map<String, List<String>> actualEntitlementsMap = u.getEntitlements().stream()
+                                .collect(Collectors.toMap(Entitlement::getAdGroup, Entitlement::getRoleIds));
+                        Map<String, List<String>> expectedEntitlementsMap = expectedMergedEntitlements.stream()
+                                .collect(Collectors.toMap(Entitlement::getAdGroup, Entitlement::getRoleIds));
+                        assertThat(actualEntitlementsMap).isEqualTo(expectedEntitlementsMap);
+                        return true;
+                    })
                     .verifyComplete();
 
             verify(userRepository).findByStaffId(staffId1);
             verify(userRepository).save(argThat(savedUser ->
                     savedUser.getId().equals(userId1) &&
                             savedUser.getUsername().equals("updatedName") &&
-                            savedUser.getEntitlements().equals(updatedEntitlements) // Verify entitlements are from request
+                            // More robust check for entitlements content
+                            savedUser.getEntitlements().stream()
+                                    .collect(Collectors.toMap(Entitlement::getAdGroup, Entitlement::getRoleIds))
+                                    .equals(expectedMergedEntitlements.stream()
+                                            .collect(Collectors.toMap(Entitlement::getAdGroup, Entitlement::getRoleIds)))
             ));
         }
 
         @Test
-        @DisplayName("insertOrUpdateUser should fail for existing inactive user if request tries to update")
-        void insertOrUpdateUser_FailUpdateInactive() {
-            // The service logic for inactive users in insertOrUpdateUser is:
-            // if (!existingUser.isActive() && !userFromRequest.isActive()) -> logs warning, proceeds to update other fields
-            // if (!existingUser.isActive() && userFromRequest.isActive()) -> reactivates
-            // This test should check the case where an update is attempted on an inactive user without reactivating.
-            // The current service code *allows* updating an inactive user if the request also marks them as inactive.
-            // If the request tries to make them active, it reactivates.
-            // The original test expected an error, but the service code was changed.
-            // Let's test reactivation.
-
-            User updateInput = User.builder().staffId(inactiveStaffId).username("updatedName").isActive(true).build(); // Try to reactivate
-            when(userRepository.findByStaffId(inactiveStaffId)).thenReturn(Mono.just(inactiveUser)); // inactiveUser is isActive=false
+        @DisplayName("insertOrUpdateUser should reactivate inactive user if request sets active=true")
+        void insertOrUpdateUser_ReactivateInactive() {
+            User updateInput = User.builder().staffId(inactiveStaffId).username("updatedName").isActive(true).build();
+            // inactiveUser is isActive=false
+            when(userRepository.findByStaffId(inactiveStaffId)).thenReturn(Mono.just(inactiveUser));
             when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
             when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
 
@@ -582,11 +791,8 @@ class UserServiceTest {
         @DisplayName("insertOrUpdateUser should fail if staffId is null")
         void insertOrUpdateUser_FailNullStaffId() {
             User input = User.builder().staffId(null).username("name").build();
-            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
-
-
-            StepVerifier.create(userService.insertOrUpdateUser(input)
-                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
+            // No need to mock authorizationUtil here as the check happens before context access
+            StepVerifier.create(userService.insertOrUpdateUser(input))
                     .expectErrorMatches(throwable -> throwable instanceof CommonException &&
                             throwable.getMessage().contains("StaffId cannot be null or blank"))
                     .verify();
@@ -599,10 +805,8 @@ class UserServiceTest {
         @DisplayName("insertOrUpdateUser should fail if staffId is blank")
         void insertOrUpdateUser_FailBlankStaffId() {
             User input = User.builder().staffId(" ").username("name").build();
-            when(authorizationUtil.extractUsernameFromContext(any())).thenReturn(testUsername);
-
-            StepVerifier.create(userService.insertOrUpdateUser(input)
-                            .contextWrite(Context.of(AuthorizationUtil.AUTHORIZATION_HEADER, testUsername)))
+            // No need to mock authorizationUtil here
+            StepVerifier.create(userService.insertOrUpdateUser(input))
                     .expectErrorMatches(throwable -> throwable instanceof CommonException &&
                             throwable.getMessage().contains("StaffId cannot be null or blank"))
                     .verify();
@@ -657,144 +861,21 @@ class UserServiceTest {
         @Test
         @DisplayName("findRolesByUserCase should return specific user case roles if user is not admin")
         void findRolesByUserCase_UserIsNotAdmin() {
-            // user2 has adGroup2 (user for CaseA)
+            // user2 has adGroup2 (user for CaseA) and its entitlements contain roleIdUserCaseA and roleId2
             List<String> user2AdGroups = user2.getEntitlements().stream().map(Entitlement::getAdGroup).collect(Collectors.toList());
             List<String> user2RoleIds = user2.getEntitlements().stream()
-                    .flatMap(e -> e.getRoleIds().stream()).distinct().collect(Collectors.toList()); // ["ROLE_USER_GLOBAL", "ROLE_USER_CASE_A"]
+                    .filter(e -> e.getRoleIds() != null)
+                    .flatMap(e -> e.getRoleIds().stream()).distinct().collect(Collectors.toList());
 
             when(userRepository.findByStaffId(staffId2)).thenReturn(Mono.just(user2));
             when(adGroupUtil.isAdmin(user2AdGroups, userCaseA)).thenReturn(false);
             when(roleRepository.findAllByIdsAndUserCaseAndIsActive(user2RoleIds, userCaseA, true))
-                    .thenReturn(Flux.just(roleUserCaseA));
+                    .thenReturn(Flux.just(roleUserCaseA)); // Only roleUserCaseA matches the case
 
             StepVerifier.create(userService.findRolesByUserCase(userCaseA, staffId2))
                     .expectNext(roleUserCaseA)
                     .verifyComplete();
             verify(roleRepository, never()).findAllByUserCaseAndIsActive(anyString(), anyBoolean());
-        }
-    }
-
-    @Nested
-    @DisplayName("Get Roles And Permissions Tests")
-    class GetRolesAndPermissionsTests {
-
-        @Test
-        @DisplayName("getRolesAndPermissions should return error if user not found")
-        void getRolesAndPermissions_UserNotFound() {
-            when(userRepository.findByStaffId("unknownStaffId")).thenReturn(Mono.empty());
-
-            StepVerifier.create(userService.getRolesAndPermissions("unknownStaffId"))
-                    .expectErrorMatches(throwable -> throwable instanceof ResourceNotFoundException)
-                    .verify();
-            verifyNoInteractions(roleRepository, resourceRepository, userMapper);
-        }
-
-        @Test
-        @DisplayName("getRolesAndPermissionsByUser should handle user with no role IDs in entitlements")
-        void getRolesAndPermissionsByUser_NoRoleIdsInEntitlements() {
-            // userWithNoRoles has an entitlement for adGroup1 but empty roleIds list
-            UserDto mappedDto = UserDto.builder().id(userWithNoRoles.getId()).staffId(userWithNoRoles.getStaffId()).build();
-            when(userMapper.toDto(userWithNoRoles)).thenReturn(mappedDto);
-
-            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithNoRoles))
-                    .expectNextMatches(dto ->
-                            dto.getId().equals(userWithNoRoles.getId()) &&
-                                    dto.getRoles().isEmpty() && // Service logic sets empty list
-                                    dto.getResources().isEmpty() // Service logic sets empty list
-                    )
-                    .verifyComplete();
-            verifyNoInteractions(roleRepository, resourceRepository);
-        }
-
-
-        @Test
-        @DisplayName("getRolesAndPermissionsByUser should handle user with no AD groups in entitlements")
-        void getRolesAndPermissionsByUser_NoAdGroupsInEntitlements() {
-            // userWithNoAdGroups has an entitlement with a null AD group but has roleId1
-            UserDto mappedDto = UserDto.builder().id(userWithNoAdGroups.getId()).staffId(userWithNoAdGroups.getStaffId()).build();
-            when(userMapper.toDto(userWithNoAdGroups)).thenReturn(mappedDto);
-            when(roleRepository.findAllByIdAndIsActive(List.of(roleId1), true)).thenReturn(Flux.just(role1));
-
-            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithNoAdGroups))
-                    .expectNextMatches(dto ->
-                            dto.getId().equals(userWithNoAdGroups.getId()) &&
-                                    dto.getRoles().size() == 1 &&
-                                    dto.getRoles().get(0).getId().equals(roleId1) &&
-                                    dto.getResources().isEmpty() // No AD groups to match resources
-                    )
-                    .verifyComplete();
-        }
-
-
-        @Test
-        @DisplayName("getRolesAndPermissionsByUser should handle roles with no resource IDs")
-        void getRolesAndPermissionsByUser_RolesHaveNoResourceIds() {
-            User userWithRole3Only = User.builder().id(userId1).staffId(staffId1)
-                    .entitlements(List.of(Entitlement.builder().adGroup(adGroup1).roleIds(List.of(roleId3)).build()))
-                    .isActive(true).isFirstLogin(false).build();
-            UserDto mappedDto = UserDto.builder().id(userId1).staffId(staffId1).build();
-
-            when(userMapper.toDto(userWithRole3Only)).thenReturn(mappedDto);
-            when(roleRepository.findAllByIdAndIsActive(List.of(roleId3), true)).thenReturn(Flux.just(role3));
-            // No need to mock resourceRepository as uniqueResourceIdsFromRoles will be empty
-
-            StepVerifier.create(userService.getRolesAndPermissionsByUser(userWithRole3Only))
-                    .expectNextMatches(dto ->
-                            dto.getRoles().size() == 1 && dto.getRoles().get(0).getId().equals(roleId3) &&
-                                    dto.getResources().isEmpty()
-                    )
-                    .verifyComplete();
-        }
-
-        @Test
-        @DisplayName("getRolesAndPermissionsByUser should return roles and filtered resources")
-        void getRolesAndPermissionsByUser_SuccessWithRolesAndResources() {
-            // user1: entitlements map to adGroups [adGroup1, adGroupOther] and roles [roleId1, roleIdAdminCaseA, roleIdUserCaseA]
-            List<String> user1EffectiveRoleIds = List.of(roleId1, roleIdAdminCaseA, roleIdUserCaseA);
-            List<String> user1EffectiveAdGroups = List.of(adGroup1, adGroupOther);
-            List<String> resourceIdsFromUser1Roles = List.of(resourceId1, resourceId2); // res1 from all, res2 from role1 & roleAdminCaseA
-
-            UserDto mappedDto = UserDto.builder().id(userId1).staffId(staffId1).build();
-            when(userMapper.toDto(user1)).thenReturn(mappedDto);
-            when(roleRepository.findAllByIdAndIsActive(user1EffectiveRoleIds, true))
-                    .thenReturn(Flux.just(role1, roleAdminCaseA, roleUserCaseA));
-            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(resourceIdsFromUser1Roles, true, user1EffectiveAdGroups))
-                    .thenReturn(Flux.just(resource1, resource2));
-
-            StepVerifier.create(userService.getRolesAndPermissionsByUser(user1))
-                    .expectNextMatches(dto -> {
-                        boolean rolesMatch = dto.getRoles().size() == 3;
-                        boolean resourcesMatch = dto.getResources().size() == 2 &&
-                                dto.getResources().stream().map(UserResourceDto::getId)
-                                        .collect(Collectors.toSet()).containsAll(List.of(resourceId1, resourceId2));
-                        return rolesMatch && resourcesMatch;
-                    })
-                    .verifyComplete();
-        }
-
-        @Test
-        @DisplayName("getRolesAndPermissionsByUser should filter resources based on AD groups")
-        void getRolesAndPermissionsByUser_ResourceFilteringByAdGroup() {
-            // user2: entitlements map to adGroup [adGroup2] and roles [roleId2, roleIdUserCaseA]
-            List<String> user2EffectiveRoleIds = List.of(roleId2, roleIdUserCaseA);
-            List<String> user2EffectiveAdGroups = List.of(adGroup2);
-            List<String> resourceIdsFromUser2Roles = List.of(resourceId1); // Only res1 from role2 & roleUserCaseA
-
-            UserDto mappedDto = UserDto.builder().id(userId2).staffId(staffId2).build();
-            when(userMapper.toDto(user2)).thenReturn(mappedDto);
-            when(roleRepository.findAllByIdAndIsActive(user2EffectiveRoleIds, true))
-                    .thenReturn(Flux.just(role2, roleUserCaseA));
-            when(resourceRepository.findAllByIdInAndIsActiveAndAdGroupsIn(resourceIdsFromUser2Roles, true, user2EffectiveAdGroups))
-                    .thenReturn(Flux.just(resource1)); // Only resource1 matches adGroup2
-
-            StepVerifier.create(userService.getRolesAndPermissionsByUser(user2))
-                    .expectNextMatches(dto -> {
-                        boolean rolesMatch = dto.getRoles().size() == 2;
-                        boolean resourcesMatch = dto.getResources().size() == 1 &&
-                                dto.getResources().get(0).getId().equals(resourceId1);
-                        return rolesMatch && resourcesMatch;
-                    })
-                    .verifyComplete();
         }
     }
 }

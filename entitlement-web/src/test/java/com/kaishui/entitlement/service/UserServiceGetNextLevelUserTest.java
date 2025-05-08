@@ -1,9 +1,10 @@
 package com.kaishui.entitlement.service;
 
 
-import com.kaishui.entitlement.entity.Entitlement; // Import Entitlement
+import com.kaishui.entitlement.entity.Entitlement;
 import com.kaishui.entitlement.entity.Role;
 import com.kaishui.entitlement.entity.User;
+import com.kaishui.entitlement.entity.dto.EntitlementDto; // Make sure this is imported
 import com.kaishui.entitlement.entity.dto.UserDto;
 import com.kaishui.entitlement.repository.RoleRepository;
 import com.kaishui.entitlement.repository.UserRepository;
@@ -17,12 +18,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.util.CollectionUtils; // For checking empty collections
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.util.ArrayList; // For mutable lists if needed
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -74,14 +75,13 @@ class UserServiceGetNextLevelUserTest {
     private User requestingAdmin, requestingManager, requestingUser, requestingUserNoGroup;
     private User targetManager1, targetManager2, targetUser1, targetManagerNoRoles;
     private Role roleManagerCaseA, roleUserCaseA, roleOtherCase;
-    private UserDto targetManagerDto1, targetManagerDto2, targetUserDto1, targetManagerDtoNoRoles, requestingUserDtoNoGroup;
+    private UserDto targetManagerDto1, targetManagerDto2, targetUserDto1, targetManagerDtoNoRoles;
+    // Removed requestingUserDtoNoGroup as it's not directly used in assertions for getNextLevelUser
 
 
     @BeforeEach
     void setUp() {
         // --- Requesting Users ---
-        // For requesting users, only their AD groups matter for getNextLevelADGroup.
-        // Role IDs within their entitlements can be empty for this test's purpose.
         requestingAdmin = User.builder().staffId(ADMIN_STAFF_ID)
                 .entitlements(List.of(Entitlement.builder().adGroup(ADMIN_GROUP_CASE_A).roleIds(Collections.emptyList()).build()))
                 .build();
@@ -114,7 +114,7 @@ class UserServiceGetNextLevelUserTest {
                 .isActive(true).build();
         targetManagerNoRoles = User.builder().staffId(TARGET_MANAGER_NO_ROLES_STAFF_ID)
                 .entitlements(List.of(
-                        Entitlement.builder().adGroup(MANAGER_GROUP_CASE_A).roleIds(null).build() // Test with null roleIds list
+                        Entitlement.builder().adGroup(MANAGER_GROUP_CASE_A).roleIds(null).build()
                 ))
                 .isActive(true).build();
 
@@ -124,19 +124,14 @@ class UserServiceGetNextLevelUserTest {
         roleUserCaseA = Role.builder().id(ROLE_ID_USER_CASE_A).roleName("User CaseA").userCase(USER_CASE_A).isActive(true).build();
         roleOtherCase = Role.builder().id(ROLE_ID_OTHER_CASE).roleName("Other Case Role").userCase("CaseB").isActive(true).build();
 
-        // --- DTOs (basic mapping simulation) ---
-        targetManagerDto1 = new UserDto();
-        targetManagerDto1.setStaffId(TARGET_MANAGER_STAFF_ID_1);
-        targetManagerDto2 = new UserDto();
-        targetManagerDto2.setStaffId(TARGET_MANAGER_STAFF_ID_2);
-        targetUserDto1 = new UserDto();
-        targetUserDto1.setStaffId(TARGET_USER_STAFF_ID_1);
-        targetManagerDtoNoRoles = new UserDto();
-        targetManagerDtoNoRoles.setStaffId(TARGET_MANAGER_NO_ROLES_STAFF_ID);
-        requestingUserDtoNoGroup = UserDto.builder().staffId(NO_GROUP_USER_STAFF_ID).build();
+        // --- DTOs (basic mapping simulation - UserMapper.toDto will be mocked to return these) ---
+        // The service will populate the 'entitlements' field of these DTOs.
+        targetManagerDto1 = UserDto.builder().staffId(TARGET_MANAGER_STAFF_ID_1).build();
+        targetManagerDto2 = UserDto.builder().staffId(TARGET_MANAGER_STAFF_ID_2).build();
+        targetUserDto1 = UserDto.builder().staffId(TARGET_USER_STAFF_ID_1).build();
+        targetManagerDtoNoRoles = UserDto.builder().staffId(TARGET_MANAGER_NO_ROLES_STAFF_ID).build();
     }
 
-    // Helper method to extract AD groups from entitlements for mocking AdGroupUtil
     private List<String> extractAdGroups(User user) {
         if (user == null || CollectionUtils.isEmpty(user.getEntitlements())) {
             return Collections.emptyList();
@@ -148,7 +143,6 @@ class UserServiceGetNextLevelUserTest {
                 .collect(Collectors.toList());
     }
 
-    // Helper method to extract Role IDs from entitlements for mocking RoleRepository
     private List<String> extractRoleIds(User user) {
         if (user == null || CollectionUtils.isEmpty(user.getEntitlements())) {
             return Collections.emptyList();
@@ -210,19 +204,20 @@ class UserServiceGetNextLevelUserTest {
         }
 
         @Test
-        @DisplayName("Should return DTOs with empty roles when target users have no role IDs in entitlements")
+        @DisplayName("Should return DTOs with correct entitlements (empty roles) when target users have no role IDs")
         void getNextLevelUser_TargetUsersHaveNoRoleIdsInEntitlements() {
             when(userRepository.findByStaffId(ADMIN_STAFF_ID)).thenReturn(Mono.just(requestingAdmin));
             when(adGroupUtil.getNextLevelADGroup(USER_CASE_A, extractAdGroups(requestingAdmin))).thenReturn(MANAGER_GROUP_CASE_A);
-            // targetManagerNoRoles is set up with an entitlement having null roleIds
             when(userRepository.findByAdGroupAndIsActive(MANAGER_GROUP_CASE_A, true)).thenReturn(Flux.just(targetManagerNoRoles));
-            when(userMapper.toDto(targetManagerNoRoles)).thenReturn(targetManagerDtoNoRoles);
-            // Role repository should not be called if extractRoleIds(targetManagerNoRoles) is empty
+            when(userMapper.toDto(targetManagerNoRoles)).thenReturn(targetManagerDtoNoRoles); // Returns DTO with staffId
 
             StepVerifier.create(userService.getNextLevelUser(USER_CASE_A, ADMIN_STAFF_ID))
                     .expectNextMatches(dto -> {
                         assertThat(dto.getStaffId()).isEqualTo(TARGET_MANAGER_NO_ROLES_STAFF_ID);
-                        assertThat(dto.getRoles()).isNotNull().isEmpty();
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto entitlementDto = dto.getEntitlements().get(0);
+                        assertThat(entitlementDto.getAdGroup()).isEqualTo(MANAGER_GROUP_CASE_A);
+                        assertThat(entitlementDto.getRoles()).isNotNull().isEmpty();
                         return true;
                     })
                     .verifyComplete();
@@ -231,7 +226,7 @@ class UserServiceGetNextLevelUserTest {
             verify(adGroupUtil).getNextLevelADGroup(USER_CASE_A, extractAdGroups(requestingAdmin));
             verify(userRepository).findByAdGroupAndIsActive(MANAGER_GROUP_CASE_A, true);
             verify(userMapper).toDto(targetManagerNoRoles);
-            verifyNoInteractions(roleRepository); // Because targetManagerNoRoles has no actual role IDs
+            verifyNoInteractions(roleRepository); // No role IDs to fetch
         }
     }
 
@@ -240,27 +235,27 @@ class UserServiceGetNextLevelUserTest {
     class SuccessScenarios {
 
         @Test
-        @DisplayName("Should return DTOs with empty roles when target users roles do not match user case")
+        @DisplayName("Should return DTOs with correct entitlements (empty roles) when target users roles do not match user case")
         void getNextLevelUser_TargetUsersRolesDoNotMatchUserCase() {
-            // targetManager1 has roleIdManagerCaseA and roleIdOtherCase in its entitlement
-            List<String> targetManager1RoleIds = extractRoleIds(targetManager1); // [ROLE_MANAGER_A, ROLE_OTHER]
+            List<String> targetManager1RoleIds = extractRoleIds(targetManager1);
 
             when(userRepository.findByStaffId(ADMIN_STAFF_ID)).thenReturn(Mono.just(requestingAdmin));
             when(adGroupUtil.getNextLevelADGroup(USER_CASE_A, extractAdGroups(requestingAdmin))).thenReturn(MANAGER_GROUP_CASE_A);
             when(userRepository.findByAdGroupAndIsActive(MANAGER_GROUP_CASE_A, true)).thenReturn(Flux.just(targetManager1));
             when(userMapper.toDto(targetManager1)).thenReturn(targetManagerDto1);
-            // Mock role repo to return empty because no roles match the *specific* userCase "CaseA" AND the IDs
-            // The service will call with targetManager1RoleIds
             when(roleRepository.findAllByIdsAndUserCaseAndIsActive(
-                    argThat(list -> list.containsAll(targetManager1RoleIds) && targetManager1RoleIds.containsAll(list)), // Content check
+                    argThat(list -> list.containsAll(targetManager1RoleIds) && targetManager1RoleIds.containsAll(list)),
                     eq(USER_CASE_A),
                     eq(true)))
-                    .thenReturn(Flux.empty());
+                    .thenReturn(Flux.empty()); // No roles match the user case
 
             StepVerifier.create(userService.getNextLevelUser(USER_CASE_A, ADMIN_STAFF_ID))
                     .expectNextMatches(dto -> {
                         assertThat(dto.getStaffId()).isEqualTo(TARGET_MANAGER_STAFF_ID_1);
-                        assertThat(dto.getRoles()).isNotNull().isEmpty();
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto entitlementDto = dto.getEntitlements().get(0);
+                        assertThat(entitlementDto.getAdGroup()).isEqualTo(MANAGER_GROUP_CASE_A);
+                        assertThat(entitlementDto.getRoles()).isNotNull().isEmpty(); // Roles list is empty
                         return true;
                     })
                     .verifyComplete();
@@ -274,13 +269,9 @@ class UserServiceGetNextLevelUserTest {
         @Test
         @DisplayName("Should return DTOs with correct user case roles (Admin -> Manager)")
         void getNextLevelUser_AdminToManager_Success() {
-            // targetManager1 has [ROLE_MANAGER_A, ROLE_OTHER]
-            // targetManager2 has []
-            // The service will collect all unique role IDs from both: [ROLE_MANAGER_A, ROLE_OTHER]
             Set<String> allTargetRoleIdsSet = extractRoleIds(targetManager1).stream().collect(Collectors.toSet());
-            allTargetRoleIdsSet.addAll(extractRoleIds(targetManager2));
-            List<String> allTargetRoleIdsList = new ArrayList<>(allTargetRoleIdsSet);
-
+            allTargetRoleIdsSet.addAll(extractRoleIds(targetManager2)); // targetManager2 has no role IDs
+            List<String> allTargetRoleIdsList = new ArrayList<>(allTargetRoleIdsSet); // [ROLE_MANAGER_A, ROLE_OTHER]
 
             when(userRepository.findByStaffId(ADMIN_STAFF_ID)).thenReturn(Mono.just(requestingAdmin));
             when(adGroupUtil.getNextLevelADGroup(USER_CASE_A, extractAdGroups(requestingAdmin))).thenReturn(MANAGER_GROUP_CASE_A);
@@ -288,7 +279,6 @@ class UserServiceGetNextLevelUserTest {
             when(userMapper.toDto(targetManager1)).thenReturn(targetManagerDto1);
             when(userMapper.toDto(targetManager2)).thenReturn(targetManagerDto2);
 
-            // Mock role repo to return only the role matching the userCaseA from the combined list
             when(roleRepository.findAllByIdsAndUserCaseAndIsActive(
                     argThat(list -> list.containsAll(allTargetRoleIdsList) && allTargetRoleIdsList.containsAll(list)),
                     eq(USER_CASE_A),
@@ -298,13 +288,19 @@ class UserServiceGetNextLevelUserTest {
             StepVerifier.create(userService.getNextLevelUser(USER_CASE_A, ADMIN_STAFF_ID))
                     .expectNextMatches(dto -> { // targetManager1 DTO
                         assertThat(dto.getStaffId()).isEqualTo(TARGET_MANAGER_STAFF_ID_1);
-                        assertThat(dto.getRoles()).hasSize(1);
-                        assertThat(dto.getRoles().get(0).getId()).isEqualTo(ROLE_ID_MANAGER_CASE_A);
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto entitlementDto = dto.getEntitlements().get(0);
+                        assertThat(entitlementDto.getAdGroup()).isEqualTo(MANAGER_GROUP_CASE_A);
+                        assertThat(entitlementDto.getRoles()).hasSize(1);
+                        assertThat(entitlementDto.getRoles().get(0).getId()).isEqualTo(ROLE_ID_MANAGER_CASE_A);
                         return true;
                     })
                     .expectNextMatches(dto -> { // targetManager2 DTO
                         assertThat(dto.getStaffId()).isEqualTo(TARGET_MANAGER_STAFF_ID_2);
-                        assertThat(dto.getRoles()).isNotNull().isEmpty();
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto entitlementDto = dto.getEntitlements().get(0);
+                        assertThat(entitlementDto.getAdGroup()).isEqualTo(MANAGER_GROUP_CASE_A);
+                        assertThat(entitlementDto.getRoles()).isNotNull().isEmpty();
                         return true;
                     })
                     .verifyComplete();
@@ -318,14 +314,12 @@ class UserServiceGetNextLevelUserTest {
         @Test
         @DisplayName("Should return DTOs with correct user case roles (Manager -> User)")
         void getNextLevelUser_ManagerToUser_Success() {
-            // targetUser1 has [ROLE_USER_A]
-            List<String> targetUser1RoleIds = extractRoleIds(targetUser1);
+            List<String> targetUser1RoleIds = extractRoleIds(targetUser1); // [ROLE_USER_A]
 
             when(userRepository.findByStaffId(MANAGER_STAFF_ID)).thenReturn(Mono.just(requestingManager));
             when(adGroupUtil.getNextLevelADGroup(USER_CASE_A, extractAdGroups(requestingManager))).thenReturn(USER_GROUP_CASE_A);
             when(userRepository.findByAdGroupAndIsActive(USER_GROUP_CASE_A, true)).thenReturn(Flux.just(targetUser1));
             when(userMapper.toDto(targetUser1)).thenReturn(targetUserDto1);
-            // Mock role repo to return the matching role
             when(roleRepository.findAllByIdsAndUserCaseAndIsActive(
                     argThat(list -> list.containsAll(targetUser1RoleIds) && targetUser1RoleIds.containsAll(list)),
                     eq(USER_CASE_A),
@@ -335,8 +329,11 @@ class UserServiceGetNextLevelUserTest {
             StepVerifier.create(userService.getNextLevelUser(USER_CASE_A, MANAGER_STAFF_ID))
                     .expectNextMatches(dto -> {
                         assertThat(dto.getStaffId()).isEqualTo(TARGET_USER_STAFF_ID_1);
-                        assertThat(dto.getRoles()).hasSize(1);
-                        assertThat(dto.getRoles().get(0).getId()).isEqualTo(ROLE_ID_USER_CASE_A);
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto entitlementDto = dto.getEntitlements().get(0);
+                        assertThat(entitlementDto.getAdGroup()).isEqualTo(USER_GROUP_CASE_A);
+                        assertThat(entitlementDto.getRoles()).hasSize(1);
+                        assertThat(entitlementDto.getRoles().get(0).getId()).isEqualTo(ROLE_ID_USER_CASE_A);
                         return true;
                     })
                     .verifyComplete();
@@ -350,25 +347,26 @@ class UserServiceGetNextLevelUserTest {
         @Test
         @DisplayName("Should return DTOs with correct user case roles (User -> Manager)")
         void getNextLevelUser_UserToManager_Success() {
-            // targetManager1 has [ROLE_MANAGER_A, ROLE_OTHER]
-            List<String> targetManager1RoleIds = extractRoleIds(targetManager1);
+            List<String> targetManager1RoleIds = extractRoleIds(targetManager1); // [ROLE_MANAGER_A, ROLE_OTHER]
 
             when(userRepository.findByStaffId(USER_STAFF_ID)).thenReturn(Mono.just(requestingUser));
             when(adGroupUtil.getNextLevelADGroup(USER_CASE_A, extractAdGroups(requestingUser))).thenReturn(MANAGER_GROUP_CASE_A);
             when(userRepository.findByAdGroupAndIsActive(MANAGER_GROUP_CASE_A, true)).thenReturn(Flux.just(targetManager1));
             when(userMapper.toDto(targetManager1)).thenReturn(targetManagerDto1);
-            // Mock role repo to return only the role matching the userCaseA
             when(roleRepository.findAllByIdsAndUserCaseAndIsActive(
                     argThat(list -> list.containsAll(targetManager1RoleIds) && targetManager1RoleIds.containsAll(list)),
                     eq(USER_CASE_A),
                     eq(true)))
-                    .thenReturn(Flux.just(roleManagerCaseA));
+                    .thenReturn(Flux.just(roleManagerCaseA)); // Only roleManagerCaseA matches userCaseA
 
             StepVerifier.create(userService.getNextLevelUser(USER_CASE_A, USER_STAFF_ID))
                     .expectNextMatches(dto -> {
                         assertThat(dto.getStaffId()).isEqualTo(TARGET_MANAGER_STAFF_ID_1);
-                        assertThat(dto.getRoles()).hasSize(1);
-                        assertThat(dto.getRoles().get(0).getId()).isEqualTo(ROLE_ID_MANAGER_CASE_A);
+                        assertThat(dto.getEntitlements()).isNotNull().hasSize(1);
+                        EntitlementDto entitlementDto = dto.getEntitlements().get(0);
+                        assertThat(entitlementDto.getAdGroup()).isEqualTo(MANAGER_GROUP_CASE_A);
+                        assertThat(entitlementDto.getRoles()).hasSize(1);
+                        assertThat(entitlementDto.getRoles().get(0).getId()).isEqualTo(ROLE_ID_MANAGER_CASE_A);
                         return true;
                     })
                     .verifyComplete();
