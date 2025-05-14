@@ -1,31 +1,79 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <!-- Include Spring Boot's default Logback configurations -->
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
-    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/entitlement-service.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/entitlement-service.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>30</maxHistory>
-        </rollingPolicy>
+    <!-- Use Spring's application name in logging -->
+    <springProperty scope="context" name="springAppName" source="spring.application.name" defaultValue="entitlement-service"/>
+
+    <!-- Define the log file path and name -->
+    <!-- Logs will be stored in a 'logs' subdirectory relative to where the application is run -->
+    <property name="LOG_DIR" value="logs"/>
+    <property name="LOG_FILE_NAME" value="${springAppName}"/>
+
+    <!-- Console Log Pattern -->
+    <!-- Includes Trace ID and Span ID from MDC (populated by Micrometer Tracing) -->
+    <property name="CONSOLE_LOG_PATTERN"
+              value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} [%X{traceId:-N/A},%X{spanId:-N/A}] %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+
+    <!-- File Log Pattern -->
+    <property name="FILE_LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- [%15.15t] [%X{traceId:-N/A},%X{spanId:-N/A}] %-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+
+    <!-- Console Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
         </encoder>
     </appender>
 
-    <root level="INFO">
+    <!-- Rolling File Appender -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${LOG_FILE_NAME}.log</file> <!-- Ensure this path is writable by the application -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- daily rollover -->
+            <fileNamePattern>${LOG_DIR}/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- keep 30 days' worth of history -->
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>3GB</totalSizeCap> <!-- Optional: Total size cap for all archived log files -->
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Root Logger Configuration -->
+    <!-- Set the default logging level for the application -->
+    <root level="INFO"> <!-- Default to INFO, can be overridden by specific loggers or profiles -->
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </root>
 
+    <!-- Application Specific Logger Configurations -->
+    <!-- Set a more detailed logging level for your application's packages -->
     <logger name="com.kaishui.entitlement" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
-    <!-- Add this logger for MongoDB -->
+
+    <!-- Example: MongoDB Driver Logging (can be noisy, adjust level as needed) -->
     <logger name="org.mongodb.driver" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
+
+    <!-- Example: Spring Framework Logging -->
+    <logger name="org.springframework.web" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+    <logger name="org.springframework.data.mongodb" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- You can add more specific loggers here -->
+
 </configuration>

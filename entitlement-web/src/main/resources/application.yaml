@@ -9,6 +9,9 @@ spring:
     mongodb:
       uri: mongodb://localhost:27017/entitlement
 management:
+  tracing:
+    sampling:
+      probability: 1.0
   endpoints:
     web:
       exposure:
@@ -17,6 +20,7 @@ jasypt:
   encryptor:
     password: ${JASYPT_ENCRYPTOR_PASSWORD:your_default_dev_password}
     algorithm: PBEWITHHMACSHA512ANDAES_256
+
 
 ad:
   group:
