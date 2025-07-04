@@ -1,0 +1,28 @@
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.resources.ConnectionProvider;
+
+@Configuration
+public class WebClientConfig {
+
+    @Bean
+    public WebClient webClient() {
+        // Configure connection provider for connection pooling
+        ConnectionProvider provider = ConnectionProvider.builder("downstreamPool")
+                .maxConnections(150) // Support 150 concurrent connections
+                .pendingAcquireMaxCount(300) // Allow up to 300 pending connections
+                .maxIdleTime(Duration.ofSeconds(30)) // Max idle time for connections
+                .build();
+
+        // Configure HttpClient with timeouts and connection provider
+        HttpClient httpClient = HttpClient.create(provider)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000) // Connection timeout: 1s
+                .responseTimeout(Duration.ofSeconds(6)); // Response timeout: 6s (slightly above downstream latency)
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
+    }
+}
