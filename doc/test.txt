@@ -26,3 +26,22 @@ public class WebClientConfig {
                 .build();
     }
 }
+
+@Configuration
+public class GatewayHttpClientConfig {
+
+    @Bean
+    public ReactorClientHttpConnector reactorClientHttpConnector() {
+        ConnectionProvider provider = ConnectionProvider.builder("downstreamPool")
+                .maxConnections(150)
+                .pendingAcquireMaxCount(300)
+                .maxIdleTime(Duration.ofSeconds(30))
+                .build();
+
+        HttpClient httpClient = HttpClient.create(provider)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000)
+                .responseTimeout(Duration.ofSeconds(6));
+
+        return new ReactorClientHttpConnector(httpClient);
+    }
+}
