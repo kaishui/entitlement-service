@@ -1,0 +1,25 @@
+graph TD
+subgraph Legacy System
+    A[Old Permission System] --> B[Excel/AD Groups]
+end
+
+subgraph New Entitlement System
+    C[API Gateway] -->|1. Feign Call: Check Endpoint Access| D[Entitlement Service]
+    D -->|2. Return: Has Permission?| C
+    C -->|3. Forward Request| E[Business Service e.g. Data Inventory]
+    E -->|4. Call: Get Data Rules| D
+    D -->|5. Return: Data Filter Rules| E
+    E -->|6. Apply Filter & Return Data| C
+end
+
+F[User] -->|Login & Request| C
+C -->|Feature Flag ON?| New_Entitlement_System
+C -->|Feature Flag OFF| Legacy_System
+
+G[NII Frontend] -->|Apply Roles| H[Entitlement APIs]
+H --> D
+I[Test Runner] -->|AT/E2E Tests| J[21 Service Accounts]
+J --> D
+
+style Legacy_System fill:#f9f9f9,stroke:#ccc
+style New_Entitlement_System fill:#e6f7ff,stroke:#1890ff

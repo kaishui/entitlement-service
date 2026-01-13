@@ -1,0 +1,1 @@
+{"dependencies":{"canvas":"^3.1.2","csv-parser":"^3.2.0","csv-stringify":"^6.6.0","lodash":"^4.17.21","ml-kmeans":"^4.2.1","nodeplotlib":"^1.1.0","xlsx":"^0.18.5"}}

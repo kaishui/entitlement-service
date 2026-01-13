@@ -1,6 +1,14 @@
 server:
   port: 8443
 
+logging:
+  level:
+    org:
+      mongodb:
+        driver:
+          protocol:
+            command: DEBUG
+
 springdoc:
   show-actuator: false
   packages-to-scan: com.kaishui.entitlement
@@ -8,10 +16,16 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27017/entitlement
+  reactor:
+    context-propagation: auto
 management:
   tracing:
+    mongo:
+      enabled: true
+      integration-type: COMMENT
     sampling:
       probability: 1.0
+    enabled: true
   endpoints:
     web:
       exposure:
